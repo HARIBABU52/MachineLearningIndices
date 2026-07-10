@@ -50,8 +50,10 @@ interface DashboardProps {
 export default function Dashboard({ initialData }: DashboardProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "technical" | "risk" | "heatmap" | "simulations" | "table">("overview");
-  const [timeframe, setTimeframe] = useState<"1M" | "6M" | "1Y" | "5Y" | "ALL">("1Y");
+  const [timeframe, setTimeframe] = useState<"1M" | "6M" | "1Y" | "5Y" | "ALL" | "CUSTOM">("1Y");
   const [selectedIndicator, setSelectedIndicator] = useState<string>("ema");
+  const [customYear, setCustomYear] = useState<number>(2026);
+  const [customMonth, setCustomMonth] = useState<string>("ALL");
   
   // Monte Carlo parameters
   const [simDays, setSimDays] = useState(252);
@@ -62,9 +64,36 @@ export default function Dashboard({ initialData }: DashboardProps) {
     setIsMounted(true);
   }, []);
 
+  // Dynamically extract all available years in the dataset
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    initialData.forEach(d => {
+      const parts = d.dateStr.split('-');
+      if (parts.length === 3) {
+        years.add(Number(parts[2]));
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [initialData]);
+
   // Filter data based on timeframe
   const filteredData = useMemo(() => {
     if (initialData.length === 0) return [];
+    
+    if (timeframe === "CUSTOM") {
+      return initialData.filter(d => {
+        const parts = d.dateStr.split('-');
+        if (parts.length !== 3) return false;
+        const y = Number(parts[2]);
+        const m = Number(parts[1]);
+        
+        const yearMatches = y === customYear;
+        const monthMatches = customMonth === "ALL" || m === Number(customMonth);
+        
+        return yearMatches && monthMatches;
+      });
+    }
+
     const latestTimestamp = initialData[initialData.length - 1].timestamp;
     
     let cutOffTimestamp = 0;
@@ -89,7 +118,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
     }
     
     return initialData.filter(d => d.timestamp >= cutOffTimestamp);
-  }, [initialData, timeframe]);
+  }, [initialData, timeframe, customYear, customMonth]);
 
   // Calculations for active filtered dataset
   const stats: SummaryStats = useMemo(() => {
@@ -396,23 +425,69 @@ export default function Dashboard({ initialData }: DashboardProps) {
           </div>
           
           {/* Timeframe Selectors */}
-          <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl shadow-inner">
-            {(["1M", "6M", "1Y", "5Y", "ALL"] as const).map(tf => (
-              <button
-                key={tf}
-                onClick={() => {
-                  setTimeframe(tf);
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 ${
-                  timeframe === tf
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                    : "text-zinc-400 hover:text-white"
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl shadow-inner">
+              {(["1M", "6M", "1Y", "5Y", "ALL", "CUSTOM"] as const).map(tf => (
+                <button
+                  key={tf}
+                  onClick={() => {
+                    setTimeframe(tf);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 ${
+                    timeframe === tf
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+
+            {timeframe === "CUSTOM" && (
+              <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
+                <select
+                  value={customYear}
+                  onChange={(e) => {
+                    setCustomYear(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-lg py-1 px-2 text-xs focus:outline-none focus:border-indigo-500"
+                >
+                  {availableYears.map(yr => (
+                    <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={customMonth}
+                  onChange={(e) => {
+                    setCustomMonth(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-lg py-1 px-2 text-xs focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="ALL">All Months</option>
+                  {[
+                    { val: "1", label: "January" },
+                    { val: "2", label: "February" },
+                    { val: "3", label: "March" },
+                    { val: "4", label: "April" },
+                    { val: "5", label: "May" },
+                    { val: "6", label: "June" },
+                    { val: "7", label: "July" },
+                    { val: "8", label: "August" },
+                    { val: "9", label: "September" },
+                    { val: "10", label: "October" },
+                    { val: "11", label: "November" },
+                    { val: "12", label: "December" }
+                  ].map(m => (
+                    <option key={m.val} value={m.val}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </header>
