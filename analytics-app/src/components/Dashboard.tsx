@@ -308,6 +308,37 @@ export default function Dashboard({ initialData }: DashboardProps) {
     };
   }, [heatmapData]);
 
+  // Calculate cumulative total return for each month column over all years
+  const monthlyTotals = useMemo<Record<string, number | null> | null>(() => {
+    if (heatmapData.length === 0) return null;
+    
+    const monthKeys = [
+      "jan", "feb", "mar", "apr", "may", "jun",
+      "jul", "aug", "sep", "oct", "nov", "dec"
+    ] as const;
+
+    const totals: Record<string, number | null> = {};
+    
+    monthKeys.forEach(key => {
+      const vals = heatmapData
+        .map(row => row[key])
+        .filter((val): val is number => val !== null);
+      
+      totals[key] = vals.length > 0 ? vals.reduce((sum, val) => sum + val, 0) : null;
+    });
+
+    const annuals = heatmapData
+      .map(row => row.total)
+      .filter((val): val is number => val !== null);
+    
+    const totalSum = annuals.length > 0 ? annuals.reduce((sum, val) => sum + val, 0) : null;
+
+    return {
+      ...totals,
+      total: totalSum
+    };
+  }, [heatmapData]);
+
   // Generate Current Signals & Quantitative Summary of the latest day
   const latestSignals = useMemo(() => {
     if (filteredData.length === 0) return [];
@@ -1238,7 +1269,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
                         );
                       })}
 
-                      {/* Monthly Averages Row (Bottom Row) */}
+                      {/* Monthly Averages Row */}
                       {monthlyAverages && (
                         <tr className="border-t-2 border-zinc-700 bg-zinc-900/60 font-bold text-white">
                           <td className="py-3 px-2 text-zinc-200 uppercase tracking-wider font-extrabold bg-zinc-900/40">Average</td>
@@ -1259,6 +1290,31 @@ export default function Dashboard({ initialData }: DashboardProps) {
                             className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/80"
                           >
                             {monthlyAverages.total !== null ? `${(monthlyAverages.total * 100).toFixed(2)}%` : "-"}
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* Monthly Totals Row (Cumulative Sum) */}
+                      {monthlyTotals && (
+                        <tr className="border-t border-zinc-850 bg-zinc-900/45 font-bold text-white">
+                          <td className="py-3 px-2 text-zinc-300 uppercase tracking-wider font-extrabold bg-zinc-900/30">Total</td>
+                          {monthsKeys.map(key => {
+                            const val = monthlyTotals[key];
+                            return (
+                              <td
+                                key={key}
+                                style={{ backgroundColor: getHeatmapColor(val) }}
+                                className="py-3 px-2 text-right font-bold text-white rounded-sm border border-zinc-950/20"
+                              >
+                                {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
+                              </td>
+                            );
+                          })}
+                          <td
+                            style={{ backgroundColor: getHeatmapColor(monthlyTotals.total) }}
+                            className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/70"
+                          >
+                            {monthlyTotals.total !== null ? `${(monthlyTotals.total * 100).toFixed(2)}%` : "-"}
                           </td>
                         </tr>
                       )}
