@@ -241,11 +241,6 @@ export interface HeatmapRow {
 }
 
 export function generateMonthlyHeatmap(records: CleanRecord[]): HeatmapRow[] {
-  const pricesByDate = new Map<string, number>();
-  records.forEach(r => {
-    pricesByDate.set(r.dateStr, r.price);
-  });
-
   const yearsSet = new Set<number>();
   records.forEach(r => {
     const [, , y] = r.dateStr.split('-');
@@ -257,67 +252,40 @@ export function generateMonthlyHeatmap(records: CleanRecord[]): HeatmapRow[] {
   const heatmap: HeatmapRow[] = [];
 
   years.forEach(year => {
-    const months = Array.from({ length: 12 }, (_, i) => i);
     const row: any = { year, total: 0 };
     
-    const endOfMonths: number[] = new Array(12).fill(0);
-    const startOfMonths: number[] = new Array(12).fill(0);
-    
-    const yearRecords = records.filter(r => r.dateStr.endsWith(`-${year}`));
-    
+    // Group records for this year
+    const yearRecords = records.filter(r => {
+      const parts = r.dateStr.split('-');
+      return Number(parts[2]) === year;
+    });
+
+    const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
     for (let month = 0; month < 12; month++) {
-      const monthPrefix = (month + 1).toString().padStart(2, '0') + '-';
-      const monthRecords = yearRecords.filter(r => r.dateStr.includes(`-${monthPrefix}`));
+      const key = monthKeys[month];
       
+      // Get records for this specific month
+      const monthRecords = yearRecords.filter(r => {
+        const parts = r.dateStr.split('-');
+        return Number(parts[1]) === month + 1;
+      });
+
       if (monthRecords.length > 0) {
-        startOfMonths[month] = monthRecords[0].open;
-        endOfMonths[month] = monthRecords[monthRecords.length - 1].price;
-      }
-    }
-
-    months.forEach(m => {
-      const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-      const key = monthKeys[m];
-      
-      const currentMonthPrice = endOfMonths[m];
-      
-      let prevPrice = 0;
-      if (m > 0) {
-        for (let p = m - 1; p >= 0; p--) {
-          if (endOfMonths[p] > 0) {
-            prevPrice = endOfMonths[p];
-            break;
-          }
-        }
-      }
-      
-      if (prevPrice === 0) {
-        const prevYearRecords = records.filter(r => r.dateStr.endsWith(`-${year - 1}`));
-        if (prevYearRecords.length > 0) {
-          prevPrice = prevYearRecords[prevYearRecords.length - 1].price;
-        } else {
-          prevPrice = startOfMonths[m];
-        }
-      }
-
-      if (currentMonthPrice > 0 && prevPrice > 0) {
-        row[key] = (currentMonthPrice - prevPrice) / prevPrice;
+        // Calculate return for this month: (End price - Start open price) / Start open price
+        const startPrice = monthRecords[0].open;
+        const endPrice = monthRecords[monthRecords.length - 1].price;
+        row[key] = (endPrice - startPrice) / startPrice;
       } else {
         row[key] = 0;
       }
-    });
-
-    const validEndPrice = [...endOfMonths].reverse().find(p => p > 0);
-    let prevYearLastPrice = 0;
-    const prevYearRecords = records.filter(r => r.dateStr.endsWith(`-${year - 1}`));
-    if (prevYearRecords.length > 0) {
-      prevYearLastPrice = prevYearRecords[prevYearRecords.length - 1].price;
-    } else {
-      prevYearLastPrice = yearRecords[0]?.open || 0;
     }
 
-    if (validEndPrice && prevYearLastPrice) {
-      row.total = (validEndPrice - prevYearLastPrice) / prevYearLastPrice;
+    // Annual return: (End price of year - Start price of year) / Start price of year
+    if (yearRecords.length > 0) {
+      const startPrice = yearRecords[0].open;
+      const endPrice = yearRecords[yearRecords.length - 1].price;
+      row.total = (endPrice - startPrice) / startPrice;
     } else {
       row.total = 0;
     }
