@@ -55,6 +55,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [customYear, setCustomYear] = useState<number>(2026);
   const [customMonth, setCustomMonth] = useState<string>("ALL");
   
+  // Days Detail Modal State
+  const [showDaysModal, setShowDaysModal] = useState(false);
+  const [daysModalTitle, setDaysModalTitle] = useState("");
+  const [daysModalData, setDaysModalData] = useState<CleanRecord[]>([]);
+  const [daysModalPage, setDaysModalPage] = useState(1);
+  
   // Monte Carlo parameters
   const [simDays, setSimDays] = useState(252);
   const [simPathsCount, setSimPathsCount] = useState(5);
@@ -119,6 +125,9 @@ export default function Dashboard({ initialData }: DashboardProps) {
     
     return initialData.filter(d => d.timestamp >= cutOffTimestamp);
   }, [initialData, timeframe, customYear, customMonth]);
+
+  const positiveDays = useMemo(() => filteredData.filter(d => d.change > 0).sort((a,b) => b.timestamp - a.timestamp), [filteredData]);
+  const negativeDays = useMemo(() => filteredData.filter(d => d.change < 0).sort((a,b) => b.timestamp - a.timestamp), [filteredData]);
 
   // Calculations for active filtered dataset
   const stats: SummaryStats = useMemo(() => {
@@ -716,15 +725,35 @@ export default function Dashboard({ initialData }: DashboardProps) {
                         {formatPercent((filteredData[filteredData.length - 1]?.price - filteredData[0]?.price) / filteredData[0]?.price)}
                       </span>
                     </div>
-                    <div className="py-3.5 flex justify-between items-center">
-                      <span className="text-sm text-zinc-400">Positive Session Days</span>
-                      <span className="text-sm font-semibold font-mono text-emerald-400">{formatPercent(stats.winRate)}</span>
-                    </div>
-                    <div className="py-3.5 flex justify-between items-center">
+                    <button
+                      onClick={() => {
+                        setDaysModalTitle("Positive Session Days");
+                        setDaysModalData(positiveDays);
+                        setDaysModalPage(1);
+                        setShowDaysModal(true);
+                      }}
+                      className="py-3 w-full flex justify-between items-center text-left hover:bg-zinc-800/30 px-2 rounded-xl transition duration-200 cursor-pointer"
+                    >
+                      <span className="text-sm text-zinc-400 border-b border-dashed border-zinc-600 hover:text-emerald-400 transition-colors">Positive Session Days</span>
+                      <span className="text-sm font-semibold font-mono text-emerald-400">{positiveDays.length} days ({formatPercent(stats.winRate)})</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDaysModalTitle("Negative Session Days");
+                        setDaysModalData(negativeDays);
+                        setDaysModalPage(1);
+                        setShowDaysModal(true);
+                      }}
+                      className="py-3 w-full flex justify-between items-center text-left hover:bg-zinc-800/30 px-2 rounded-xl transition duration-200 cursor-pointer"
+                    >
+                      <span className="text-sm text-zinc-400 border-b border-dashed border-zinc-600 hover:text-rose-400 transition-colors">Negative Session Days</span>
+                      <span className="text-sm font-semibold font-mono text-rose-400">{negativeDays.length} days ({formatPercent(filteredData.length > 0 ? (filteredData.length - positiveDays.length) / filteredData.length : 0)})</span>
+                    </button>
+                    <div className="py-3 px-2 flex justify-between items-center">
                       <span className="text-sm text-zinc-400">Best Trading Day</span>
                       <span className="text-sm font-semibold font-mono text-emerald-400">+{formatPercent(stats.bestDay)}</span>
                     </div>
-                    <div className="py-3.5 flex justify-between items-center">
+                    <div className="py-3 px-2 flex justify-between items-center">
                       <span className="text-sm text-zinc-400">Worst Trading Day</span>
                       <span className="text-sm font-semibold font-mono text-rose-400">{formatPercent(stats.worstDay)}</span>
                     </div>
@@ -1276,6 +1305,78 @@ export default function Dashboard({ initialData }: DashboardProps) {
           )}
         </section>
       </main>
+
+      {/* Positive/Negative Days Modal Overlay Popup */}
+      {showDaysModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-zinc-150">{daysModalTitle}</h3>
+                <p className="text-xs text-zinc-500 font-mono mt-0.5">Total count: {daysModalData.length} records</p>
+              </div>
+              <button
+                onClick={() => setShowDaysModal(false)}
+                className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition duration-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content - Table List */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-2">Date</th>
+                    <th className="py-2.5 px-2 text-right">Close Price</th>
+                    <th className="py-2.5 px-2 text-right">Daily Change %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850 text-xs font-mono text-zinc-200">
+                  {daysModalData
+                    .slice((daysModalPage - 1) * 10, daysModalPage * 10)
+                    .map((d, idx) => (
+                      <tr key={idx} className="hover:bg-zinc-950/20">
+                        <td className="py-2 px-2 text-zinc-300">{d.dateStr}</td>
+                        <td className="py-2 px-2 text-right font-bold text-zinc-100">${formatNumber(d.price)}</td>
+                        <td className={`py-2 px-2 text-right font-bold ${
+                          d.change >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}>
+                          {d.change >= 0 ? "+" : ""}
+                          {formatPercent(d.change)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer - Pagination */}
+            <div className="px-6 py-4 border-t border-zinc-800 flex items-center justify-between bg-zinc-950/40">
+              <button
+                onClick={() => setDaysModalPage(prev => Math.max(1, prev - 1))}
+                disabled={daysModalPage === 1}
+                className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 disabled:opacity-40 rounded-lg text-[10px] font-bold tracking-wider hover:bg-zinc-800 transition duration-200"
+              >
+                PREVIOUS
+              </button>
+              <span className="text-[10px] font-mono text-zinc-500">
+                Page {daysModalPage} of {Math.max(1, Math.ceil(daysModalData.length / 10))}
+              </span>
+              <button
+                onClick={() => setDaysModalPage(prev => Math.min(Math.ceil(daysModalData.length / 10), prev + 1))}
+                disabled={daysModalPage === Math.ceil(daysModalData.length / 10)}
+                className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 disabled:opacity-40 rounded-lg text-[10px] font-bold tracking-wider hover:bg-zinc-800 transition duration-200"
+              >
+                NEXT
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
