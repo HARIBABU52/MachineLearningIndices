@@ -688,7 +688,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
                               style={{ backgroundColor: getHeatmapColor(val) }}
                               className="py-2.5 px-2 text-right font-medium text-zinc-100 rounded-sm border border-zinc-950/20"
                             >
-                              {val !== 0 ? `${(val * 100).toFixed(1)}%` : "-"}
+                              {val !== 0 ? `${(val * 100).toFixed(2)}%` : "-"}
                             </td>
                           );
                         })}
@@ -697,7 +697,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
                           style={{ backgroundColor: getHeatmapColor(row.total) }}
                           className="py-2.5 px-3 text-right font-bold text-white bg-zinc-800/20"
                         >
-                          {row.total !== 0 ? `${(row.total * 100).toFixed(1)}%` : "-"}
+                          {row.total !== 0 ? `${(row.total * 100).toFixed(2)}%` : "-"}
                         </td>
                       </tr>
                     );
