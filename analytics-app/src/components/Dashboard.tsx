@@ -30,7 +30,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TrendingDown,
-  Info
+  Info,
+  Award,
+  ShieldCheck
 } from "lucide-react";
 import {
   CleanRecord,
@@ -190,6 +192,90 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const formatPercent = (val: number) => {
     return `${(val * 100).toFixed(2)}%`;
   };
+
+  // Analyze seasonality and best/worst months from heatmap matrix
+  const monthlyMetrics = useMemo(() => {
+    if (heatmapData.length === 0) return null;
+
+    let bestSingleMonth = { year: 0, monthName: "", value: -Infinity };
+    let worstSingleMonth = { year: 0, monthName: "", value: Infinity };
+
+    const monthNames = [
+      { key: "jan", label: "January" },
+      { key: "feb", label: "February" },
+      { key: "mar", label: "March" },
+      { key: "apr", label: "April" },
+      { key: "may", label: "May" },
+      { key: "jun", label: "June" },
+      { key: "jul", label: "July" },
+      { key: "aug", label: "August" },
+      { key: "sep", label: "September" },
+      { key: "oct", label: "October" },
+      { key: "nov", label: "November" },
+      { key: "dec", label: "December" }
+    ] as const;
+
+    // Collect all returns per calendar month to calculate average and standard deviation
+    const monthStats: Record<string, { label: string; values: number[] }> = {};
+    monthNames.forEach(m => {
+      monthStats[m.key] = { label: m.label, values: [] };
+    });
+
+    heatmapData.forEach(row => {
+      monthNames.forEach(m => {
+        const val = row[m.key];
+        if (val !== null) {
+          // Check for absolute best/worst month over all years
+          if (val > bestSingleMonth.value) {
+            bestSingleMonth = { year: row.year, monthName: m.label, value: val };
+          }
+          if (val < worstSingleMonth.value) {
+            worstSingleMonth = { year: row.year, monthName: m.label, value: val };
+          }
+          monthStats[m.key].values.push(val);
+        }
+      });
+    });
+
+    // Calculate average and standard deviation per calendar month
+    const calculatedMonths = monthNames.map(m => {
+      const vals = monthStats[m.key].values;
+      if (vals.length === 0) {
+        // Return fallback
+        return { key: m.key, label: m.label, avg: 0, stdDev: 0, winRate: 0 };
+      }
+      const sum = vals.reduce((s, v) => s + v, 0);
+      const avg = sum / vals.length;
+      const positiveCount = vals.filter(v => v > 0).length;
+      const winRate = positiveCount / vals.length;
+
+      // Variance & StdDev
+      const variance = vals.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / vals.length;
+      const stdDev = Math.sqrt(variance);
+
+      return {
+        key: m.key,
+        label: m.label,
+        avg,
+        stdDev,
+        winRate
+      };
+    });
+
+    const bestAverageMonth = [...calculatedMonths].sort((a, b) => b.avg - a.avg)[0];
+    const worstAverageMonth = [...calculatedMonths].sort((a, b) => a.avg - b.avg)[0];
+    const stableMonth = [...calculatedMonths].sort((a, b) => a.stdDev - b.stdDev)[0];
+    const volatileMonth = [...calculatedMonths].sort((a, b) => b.stdDev - a.stdDev)[0];
+
+    return {
+      bestSingleMonth,
+      worstSingleMonth,
+      bestAverageMonth,
+      worstAverageMonth,
+      stableMonth,
+      volatileMonth
+    };
+  }, [heatmapData]);
 
   // Generate Current Signals & Quantitative Summary of the latest day
   const latestSignals = useMemo(() => {
@@ -1049,7 +1135,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
           {/* Tab 4: Heatmap Matrix */}
           {activeTab === "heatmap" && (
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg overflow-x-auto">
+            <>
+              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg overflow-x-auto">
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-zinc-100">S&P 500 Monthly Returns Heatmap Matrix</h3>
                 <p className="text-xs text-zinc-400">Grid visualization of S&P 500 performance by year and month</p>
@@ -1121,7 +1208,99 @@ export default function Dashboard({ initialData }: DashboardProps) {
                 </tbody>
               </table>
             </div>
-          )}
+
+            {/* Heatmap Seasonality Analytics Cards */}
+            <div className="space-y-6 mt-8">
+              <div>
+                <h4 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">Heatmap Seasonality Insights</h4>
+                <p className="text-xs text-zinc-550 mt-1">Quantitative seasonality indicators calculated across all years in the dataset</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                {/* 1. Best Single Month Card */}
+                <div className="bg-zinc-900/40 border border-zinc-800/80 p-5 rounded-2xl backdrop-blur-md flex flex-col justify-between hover:border-emerald-500/30 transition duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-400">Best Month in History</span>
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                      <Award className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-2xl font-bold text-emerald-450">
+                      {monthlyMetrics ? `+${(monthlyMetrics.bestSingleMonth.value * 100).toFixed(2)}%` : "N/A"}
+                    </span>
+                    <p className="text-xs text-zinc-300 mt-1">
+                      {monthlyMetrics ? `${monthlyMetrics.bestSingleMonth.monthName} ${monthlyMetrics.bestSingleMonth.year}` : "N/A"}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-3 leading-relaxed">Single highest monthly performance recorded over the dataset period.</p>
+                </div>
+
+                {/* 2. Worst Single Month Card */}
+                <div className="bg-zinc-900/40 border border-zinc-800/80 p-5 rounded-2xl backdrop-blur-md flex flex-col justify-between hover:border-rose-500/30 transition duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-400">Worst Month in History</span>
+                    <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-450">
+                      <TrendingDown className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-2xl font-bold text-rose-450">
+                      {monthlyMetrics ? `${(monthlyMetrics.worstSingleMonth.value * 100).toFixed(2)}%` : "N/A"}
+                    </span>
+                    <p className="text-xs text-zinc-300 mt-1">
+                      {monthlyMetrics ? `${monthlyMetrics.worstSingleMonth.monthName} ${monthlyMetrics.worstSingleMonth.year}` : "N/A"}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-3 leading-relaxed">Single steepest monthly performance drop recorded over the dataset period.</p>
+                </div>
+
+                {/* 3. Seasonality Outperformance Card */}
+                <div className="bg-zinc-900/40 border border-zinc-800/80 p-5 rounded-2xl backdrop-blur-md flex flex-col justify-between hover:border-indigo-500/30 transition duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-400">Best Seasonality Month</span>
+                    <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                      <TrendingUp className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-2xl font-bold text-zinc-150 animate-pulse">
+                      {monthlyMetrics ? monthlyMetrics.bestAverageMonth.label : "N/A"}
+                    </span>
+                    <p className="text-xs text-zinc-300 mt-1">
+                      Avg Return: {monthlyMetrics ? `+${(monthlyMetrics.bestAverageMonth.avg * 100).toFixed(2)}%` : "N/A"}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-3 leading-relaxed">
+                    Calendar month with highest average return over the years. (Reliability: {monthlyMetrics ? `${(monthlyMetrics.bestAverageMonth.winRate * 100).toFixed(0)}%` : "N/A"})
+                  </p>
+                </div>
+
+                {/* 4. Most Stable Month Card */}
+                <div className="bg-zinc-900/40 border border-zinc-800/80 p-5 rounded-2xl backdrop-blur-md flex flex-col justify-between hover:border-violet-500/30 transition duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-400">Most Stable Month</span>
+                    <div className="p-1.5 rounded-lg bg-violet-500/10 text-violet-400">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className="text-2xl font-bold text-zinc-150">
+                      {monthlyMetrics ? monthlyMetrics.stableMonth.label : "N/A"}
+                    </span>
+                    <p className="text-xs text-zinc-300 mt-1">
+                      Std Dev Volatility: {monthlyMetrics ? `${(monthlyMetrics.stableMonth.stdDev * 100).toFixed(2)}%` : "N/A"}
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-3 leading-relaxed">
+                    Calendar month with the lowest volatility and historical dispersion of returns.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </>
+        )}
 
           {/* Tab 5: Simulations & Stress Tests */}
           {activeTab === "simulations" && (
