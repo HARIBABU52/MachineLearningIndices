@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Dashboard</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #111827;
+}
+
+body {
+    overflow: hidden;
+}
+
+.toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #111827;
+    border-bottom: 1px solid #374151;
+    height: 50px;
+}
+
+.refresh-label {
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 56px;
+    height: 28px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #dc2626;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    top: 3px;
+    background-color: white;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.switch input:checked + .slider {
+    background-color: #16a34a;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+}
+
+.switch input:checked + .slider:before {
+    transform: translateX(28px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.switch input:active + .slider:before {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+    background: #1f2937;
+    border-bottom: 1px solid #374151;
+}
+
+.tabs button {
+    flex: 1 1 180px;
+    min-width: 140px;
+    padding: 12px;
+    border: none;
+    cursor: pointer;
+    background: #374151;
+    color: #fff;
+    font-size: 14px;
+    border-radius: 8px;
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tabs button:hover {
+    background: #4b5563;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.tabs button.active {
+    background: #2563eb;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) inset;
+    transform: scale(1.02);
+}
+
+.tabs .separator {
+    width: 1px;
+    height: 36px;
+    background: #4b5563;
+    margin: 0 4px;
+}
+
+iframe {
+    width: 100%;
+    height: calc(100vh - 112px);
+    border: none;
+    background: #fff;
+    opacity: 1;
+    transition: opacity 0.25s ease;
+}
+
+iframe.loading {
+    opacity: 0.35;
+}
+
+@media (max-width: 768px) {
+    body {
+        overflow: auto;
+    }
+
+    .toolbar {
+        justify-content: center;
+        padding: 6px;
+    }
+
+    .refresh-label {
+        font-size: 12px;
+    }
+
+    .tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        padding: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+    }
+
+    .tabs button {
+        flex: 0 0 auto;
+        min-width: auto;
+        padding: 8px 10px;
+        font-size: 12px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .tabs .separator {
+        height: 28px;
+    }
+
+    iframe {
+        height: calc(100vh - 146px);
+    }
+}
+
+@media (max-width: 480px) {
+    .tabs {
+        gap: 5px;
+        padding: 6px;
+    }
+
+    .tabs button {
+        padding: 7px 9px;
+        font-size: 11px;
+    }
+
+    iframe {
+        height: calc(100vh - 140px);
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="toolbar">
+    <span class="refresh-label">Auto Refresh</span>
+    <label class="switch" title="Toggle Auto Refresh">
+        <input id="refreshToggle" type="checkbox">
+        <span class="slider"></span>
+    </label>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<iframe id="viewer" src="https://www.investing.com/indices"></iframe>
+
+<script>
+const pages = [
+    { label: "Investing Indices", icon: "📈", url: "https://www.investing.com/indices", refreshable: false },
+    { label: "S&P 500", icon: "🧭", url: "https://www.slickcharts.com/sp500", refreshable: true },
+    { label: "S&P Heatmap", icon: "🔥", url: "https://www.slickcharts.com/sp500/heatmap", refreshable: true },
+    { label: "Nasdaq 100", icon: "💹", url: "https://www.slickcharts.com/nasdaq100", refreshable: true },
+    { label: "Nasdaq Heatmap", icon: "🌡️", url: "https://www.slickcharts.com/nasdaq100/heatmap", refreshable: true }
+];
+
+const externalLinks = [
+    { label: "Yahoo", icon: "🟣", url: "https://finance.yahoo.com/" },
+    { label: "Perplexity Fin", icon: "🧠", url: "https://www.perplexity.ai/finance" },
+    { label: "Discover", icon: "🔎", url: "https://www.perplexity.ai/discover" },
+    { label: "Calendar", icon: "📅", url: "https://web.sensibull.com/stock-market-calendar/economic-calendar" },
+    { label: "CME", icon: "🧪", url: "https://www.cmegroup.com/trading_tools/simulator" },
+    { label: "TV S&P Chart", icon: "📊", url: "https://in.tradingview.com/symbols/SPCFD-SPX/" },
+    { label: "TV Nasdaq Chart", icon: "💼", url: "https://www.tradingview.com/symbols/NASDAQ-NDX/" }
+];
+
+let currentUrl = pages[0].url;
+let currentRefreshable = pages[0].refreshable;
+let autoRefresh = false;
+
+const viewer = document.getElementById("viewer");
+const tabs = document.getElementById("tabs");
+const refreshToggle = document.getElementById("refreshToggle");
+
+function setActiveButton(activeButton) {
+    document.querySelectorAll(".tabs button").forEach(button => button.classList.remove("active"));
+    if (activeButton) activeButton.classList.add("active");
+}
+
+function loadPage(url, button, refreshable) {
+    viewer.classList.add("loading");
+    setTimeout(() => {
+        currentUrl = url;
+        currentRefreshable = refreshable;
+        viewer.src = currentUrl;
+        setActiveButton(button);
+    }, 120);
+}
+
+viewer.addEventListener("load", () => {
+    viewer.classList.remove("loading");
+});
+
+function openExternal(url) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+function createButton(text, icon, isExternal = false) {
+    const wrap = document.createElement("span");
+    wrap.textContent = icon + " " + text + (isExternal ? " ↗" : "");
+    return wrap;
+}
+
+function createTabs() {
+    pages.forEach((page, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.appendChild(createButton(page.label, page.icon, false));
+        if (index === 0) button.classList.add("active");
+        button.addEventListener("click", () => loadPage(page.url, button, page.refreshable));
+        tabs.appendChild(button);
+    });
+
+    if (externalLinks.length > 0) {
+        const separator = document.createElement("div");
+        separator.className = "separator";
+        tabs.appendChild(separator);
+    }
+
+    externalLinks.forEach(link => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.appendChild(createButton(link.label, link.icon, true));
+        button.addEventListener("click", () => openExternal(link.url));
+        tabs.appendChild(button);
+    });
+}
+
+createTabs();
+refreshToggle.addEventListener("change", () => {
+    autoRefresh = refreshToggle.checked;
+});
+
+setInterval(() => {
+    if (autoRefresh && currentRefreshable) {
+        viewer.classList.add("loading");
+        viewer.src = currentUrl + "?t=" + Date.now();
+    }
+}, 3000);
+</script>
+
+</body>
+</html>
