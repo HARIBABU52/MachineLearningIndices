@@ -20,6 +20,8 @@ export interface CleanRecord {
   // 1. EMA 20 & 50
   ema20?: number;
   ema50?: number;
+  sma50?: number;
+  sma200?: number;
 
   // 2. Volume
   volume: number;
@@ -143,6 +145,20 @@ export function cleanData(raw: RawRecord[]): CleanRecord[] {
     // Attach basic EMAs
     cleaned[i].ema20 = ema20Arr[i];
     cleaned[i].ema50 = ema50Arr[i];
+
+    // SMA 50
+    if (i >= 49) {
+      let sum = 0;
+      for (let j = i - 49; j <= i; j++) sum += prices[j];
+      cleaned[i].sma50 = sum / 50;
+    }
+
+    // SMA 200
+    if (i >= 199) {
+      let sum = 0;
+      for (let j = i - 199; j <= i; j++) sum += prices[j];
+      cleaned[i].sma200 = sum / 200;
+    }
 
     // Attach MACD
     if (i >= 26) {
