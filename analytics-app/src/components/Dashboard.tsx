@@ -277,6 +277,37 @@ export default function Dashboard({ initialData }: DashboardProps) {
     };
   }, [heatmapData]);
 
+  // Calculate average return for each month column over all years
+  const monthlyAverages = useMemo<Record<string, number | null> | null>(() => {
+    if (heatmapData.length === 0) return null;
+    
+    const monthKeys = [
+      "jan", "feb", "mar", "apr", "may", "jun",
+      "jul", "aug", "sep", "oct", "nov", "dec"
+    ] as const;
+
+    const averages: Record<string, number | null> = {};
+    
+    monthKeys.forEach(key => {
+      const vals = heatmapData
+        .map(row => row[key])
+        .filter((val): val is number => val !== null);
+      
+      averages[key] = vals.length > 0 ? vals.reduce((sum, val) => sum + val, 0) / vals.length : null;
+    });
+
+    const annuals = heatmapData
+      .map(row => row.total)
+      .filter((val): val is number => val !== null);
+    
+    const totalAvg = annuals.length > 0 ? annuals.reduce((sum, val) => sum + val, 0) / annuals.length : null;
+
+    return {
+      ...averages,
+      total: totalAvg
+    };
+  }, [heatmapData]);
+
   // Generate Current Signals & Quantitative Summary of the latest day
   const latestSignals = useMemo(() => {
     if (filteredData.length === 0) return [];
@@ -1134,80 +1165,106 @@ export default function Dashboard({ initialData }: DashboardProps) {
           )}
 
           {/* Tab 4: Heatmap Matrix */}
-          {activeTab === "heatmap" && (
-            <>
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg overflow-x-auto">
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-zinc-100">S&P 500 Monthly Returns Heatmap Matrix</h3>
-                <p className="text-xs text-zinc-400">Grid visualization of S&P 500 performance by year and month</p>
-              </div>
+          {activeTab === "heatmap" && (() => {
+            const getHeatmapColor = (val: number | null) => {
+              if (val === null || val === 0) return "rgba(39, 39, 42, 0.4)";
+              if (val > 0) {
+                const opacity = Math.min(0.1 + val * 3, 0.75);
+                return `rgba(16, 185, 129, ${opacity})`;
+              } else {
+                const opacity = Math.min(0.1 + Math.abs(val) * 3, 0.75);
+                return `rgba(239, 68, 68, ${opacity})`;
+              }
+            };
 
-              <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead>
-                  <tr className="border-b border-zinc-800 text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    <th className="py-3 px-2">Year</th>
-                    <th className="py-3 px-2 text-right">Jan</th>
-                    <th className="py-3 px-2 text-right">Feb</th>
-                    <th className="py-3 px-2 text-right">Mar</th>
-                    <th className="py-3 px-2 text-right">Apr</th>
-                    <th className="py-3 px-2 text-right">May</th>
-                    <th className="py-3 px-2 text-right">Jun</th>
-                    <th className="py-3 px-2 text-right">Jul</th>
-                    <th className="py-3 px-2 text-right">Aug</th>
-                    <th className="py-3 px-2 text-right">Sep</th>
-                    <th className="py-3 px-2 text-right">Oct</th>
-                    <th className="py-3 px-2 text-right">Nov</th>
-                    <th className="py-3 px-2 text-right">Dec</th>
-                    <th className="py-3 px-3 text-right bg-zinc-800/40 rounded-t-lg">Annual</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-850 text-xs font-mono">
-                  {heatmapData.map((row) => {
-                    const getHeatmapColor = (val: number | null) => {
-                      if (val === null || val === 0) return "rgba(39, 39, 42, 0.4)";
-                      if (val > 0) {
-                        const opacity = Math.min(0.1 + val * 3, 0.75);
-                        return `rgba(16, 185, 129, ${opacity})`;
-                      } else {
-                        const opacity = Math.min(0.1 + Math.abs(val) * 3, 0.75);
-                        return `rgba(239, 68, 68, ${opacity})`;
-                      }
-                    };
+            const monthsKeys = [
+              "jan", "feb", "mar", "apr", "may", "jun",
+              "jul", "aug", "sep", "oct", "nov", "dec"
+            ] as const;
 
-                    const monthsKeys = [
-                      "jan", "feb", "mar", "apr", "may", "jun",
-                      "jul", "aug", "sep", "oct", "nov", "dec"
-                    ] as const;
+            return (
+              <>
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg overflow-x-auto">
+                  <div className="mb-6">
+                    <h3 className="text-lg font-bold text-zinc-100">S&P 500 Monthly Returns Heatmap Matrix</h3>
+                    <p className="text-xs text-zinc-400">Grid visualization of S&P 500 performance by year and month</p>
+                  </div>
 
-                    return (
-                      <tr key={row.year} className="hover:bg-zinc-900/20 transition-colors">
-                        <td className="py-2.5 px-2 font-bold text-zinc-300">{row.year}</td>
-                        
-                        {monthsKeys.map(key => {
-                          const val = row[key];
-                          return (
-                            <td
-                              key={key}
-                              style={{ backgroundColor: getHeatmapColor(val) }}
-                              className="py-2.5 px-2 text-right font-medium text-zinc-100 rounded-sm border border-zinc-950/20"
-                            >
-                              {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
-                            </td>
-                          );
-                        })}
-
-                        <td
-                          style={{ backgroundColor: getHeatmapColor(row.total) }}
-                          className="py-2.5 px-3 text-right font-bold text-white bg-zinc-800/20"
-                        >
-                          {row.total !== null ? `${(row.total * 100).toFixed(2)}%` : "-"}
-                        </td>
+                  <table className="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="border-b border-zinc-800 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                        <th className="py-3 px-2">Year</th>
+                        <th className="py-3 px-2 text-right">Jan</th>
+                        <th className="py-3 px-2 text-right">Feb</th>
+                        <th className="py-3 px-2 text-right">Mar</th>
+                        <th className="py-3 px-2 text-right">Apr</th>
+                        <th className="py-3 px-2 text-right">May</th>
+                        <th className="py-3 px-2 text-right">Jun</th>
+                        <th className="py-3 px-2 text-right">Jul</th>
+                        <th className="py-3 px-2 text-right">Aug</th>
+                        <th className="py-3 px-2 text-right">Sep</th>
+                        <th className="py-3 px-2 text-right">Oct</th>
+                        <th className="py-3 px-2 text-right">Nov</th>
+                        <th className="py-3 px-2 text-right">Dec</th>
+                        <th className="py-3 px-3 text-right bg-zinc-800/40 rounded-t-lg">Annual</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-850 text-xs font-mono">
+                      {heatmapData.map((row) => {
+                        return (
+                          <tr key={row.year} className="hover:bg-zinc-900/20 transition-colors">
+                            <td className="py-2.5 px-2 font-bold text-zinc-300">{row.year}</td>
+                            
+                            {monthsKeys.map(key => {
+                              const val = row[key];
+                              return (
+                                <td
+                                  key={key}
+                                  style={{ backgroundColor: getHeatmapColor(val) }}
+                                  className="py-2.5 px-2 text-right font-medium text-zinc-100 rounded-sm border border-zinc-950/20"
+                                >
+                                  {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
+                                </td>
+                              );
+                            })}
+
+                            <td
+                              style={{ backgroundColor: getHeatmapColor(row.total) }}
+                              className="py-2.5 px-3 text-right font-bold text-white bg-zinc-800/20"
+                            >
+                              {row.total !== null ? `${(row.total * 100).toFixed(2)}%` : "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* Monthly Averages Row (Bottom Row) */}
+                      {monthlyAverages && (
+                        <tr className="border-t-2 border-zinc-700 bg-zinc-900/60 font-bold text-white">
+                          <td className="py-3 px-2 text-zinc-200 uppercase tracking-wider font-extrabold bg-zinc-900/40">Average</td>
+                          {monthsKeys.map(key => {
+                            const val = monthlyAverages[key];
+                            return (
+                              <td
+                                key={key}
+                                style={{ backgroundColor: getHeatmapColor(val) }}
+                                className="py-3 px-2 text-right font-bold text-white rounded-sm border border-zinc-950/25"
+                              >
+                                {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
+                              </td>
+                            );
+                          })}
+                          <td
+                            style={{ backgroundColor: getHeatmapColor(monthlyAverages.total) }}
+                            className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/80"
+                          >
+                            {monthlyAverages.total !== null ? `${(monthlyAverages.total * 100).toFixed(2)}%` : "-"}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
             {/* Heatmap Seasonality Analytics Cards */}
             <div className="space-y-6 mt-8">
@@ -1300,7 +1357,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
               </div>
             </div>
           </>
-        )}
+        );
+      })()}
 
           {/* Tab 5: Simulations & Stress Tests */}
           {activeTab === "simulations" && (
