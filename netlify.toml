@@ -1,7 +1,12 @@
 [build]
   base = "analytics-app"
-  publish = ".next"
+  publish = "out"
   command = "npm run build"
 
 [build.environment]
   NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
