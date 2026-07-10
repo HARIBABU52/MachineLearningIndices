@@ -25,7 +25,6 @@ const externalLinks = [
 export default function USIndicesPage() {
   const [activeTab, setActiveTab] = useState(pages[0]);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [iframeLoading, setIframeLoading] = useState(true);
   const [iframeUrl, setIframeUrl] = useState(pages[0].url);
 
   // Auto refresh effect
@@ -33,7 +32,6 @@ export default function USIndicesPage() {
     if (!autoRefresh || !activeTab.refreshable) return;
 
     const interval = setInterval(() => {
-      setIframeLoading(true);
       setIframeUrl(`${activeTab.url}?t=${Date.now()}`);
     }, 3000);
 
@@ -41,7 +39,6 @@ export default function USIndicesPage() {
   }, [autoRefresh, activeTab]);
 
   const handleTabChange = (page: typeof pages[0]) => {
-    setIframeLoading(true);
     setActiveTab(page);
     setIframeUrl(page.url);
   };
@@ -117,18 +114,9 @@ export default function USIndicesPage() {
 
       {/* Main View Area */}
       <div className="flex-1 relative bg-white min-h-[calc(100vh-120px)]">
-        {iframeLoading && (
-          <div className="absolute inset-0 bg-[#09090b]/80 backdrop-blur-xs flex items-center justify-center z-10">
-            <div className="flex flex-col items-center gap-3">
-              <RefreshCw className="h-8 w-8 text-indigo-500 animate-spin" />
-              <p className="text-xs text-zinc-400 font-mono">Loading dynamic portal feed...</p>
-            </div>
-          </div>
-        )}
         <iframe
           src={iframeUrl}
           className="w-full h-full min-h-[calc(100vh-120px)] border-none"
-          onLoad={() => setIframeLoading(false)}
         />
       </div>
     </div>

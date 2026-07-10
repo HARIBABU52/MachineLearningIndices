@@ -57,6 +57,18 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [selectedIndicator, setSelectedIndicator] = useState<string>("ema");
   const [customYear, setCustomYear] = useState<number>(2026);
   const [customMonth, setCustomMonth] = useState<string>("ALL");
+  const [heatmapViewMode, setHeatmapViewMode] = useState<"matrix" | "calendar" | "chart">("matrix");
+  const [seasonalityChartMetric, setSeasonalityChartMetric] = useState<"avg" | "winRate">("avg");
+  const [calendarYear, setCalendarYear] = useState<number>(2026);
+
+  // Quick date lookup map for Calendar View
+  const dailyDateMap = useMemo(() => {
+    const map = new Map<string, CleanRecord>();
+    initialData.forEach(d => {
+      map.set(d.dateStr, d);
+    });
+    return map;
+  }, [initialData]);
   
   // Days Detail Modal State
   const [showDaysModal, setShowDaysModal] = useState(false);
@@ -274,7 +286,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
       bestAverageMonth,
       worstAverageMonth,
       stableMonth,
-      volatileMonth
+      volatileMonth,
+      seasonalityData: calculatedMonths
     };
   }, [heatmapData]);
 
@@ -1222,113 +1235,340 @@ export default function Dashboard({ initialData }: DashboardProps) {
               "jul", "aug", "sep", "oct", "nov", "dec"
             ] as const;
 
+            const calendarMonths = [
+              { num: 1, label: "January", key: "jan" },
+              { num: 2, label: "February", key: "feb" },
+              { num: 3, label: "March", key: "mar" },
+              { num: 4, label: "April", key: "apr" },
+              { num: 5, label: "May", key: "may" },
+              { num: 6, label: "June", key: "jun" },
+              { num: 7, label: "July", key: "jul" },
+              { num: 8, label: "August", key: "aug" },
+              { num: 9, label: "September", key: "sep" },
+              { num: 10, label: "October", key: "oct" },
+              { num: 11, label: "November", key: "nov" },
+              { num: 12, label: "December", key: "dec" }
+            ] as const;
+
             return (
               <>
                 <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg overflow-x-auto">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-bold text-zinc-100">S&P 500 Monthly Returns Heatmap Matrix</h3>
-                    <p className="text-xs text-zinc-400">Grid visualization of S&P 500 performance by year and month</p>
+                  <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-zinc-150">S&P 500 Monthly Returns Heatmap</h3>
+                      <p className="text-xs text-zinc-400">Grid visualization of S&P 500 performance by year and month</p>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      {/* Calendar Year Selector */}
+                      {heatmapViewMode === "calendar" && (
+                        <div className="flex items-center gap-2 bg-zinc-950/40 p-1.5 rounded-lg border border-zinc-850">
+                          <span className="text-[10px] font-bold text-zinc-405 uppercase tracking-wider pl-1">Year:</span>
+                          <select
+                            value={calendarYear}
+                            onChange={(e) => setCalendarYear(Number(e.target.value))}
+                            className="bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-md py-0.5 px-2 text-xs font-semibold focus:outline-none focus:border-indigo-500"
+                          >
+                            {availableYears.map(yr => (
+                              <option key={yr} value={yr}>{yr}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Chart Metric Selector */}
+                      {heatmapViewMode === "chart" && (
+                        <div className="flex bg-zinc-950/40 p-1 rounded-lg border border-zinc-850">
+                          <button
+                            onClick={() => setSeasonalityChartMetric("avg")}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                              seasonalityChartMetric === "avg"
+                                ? "bg-indigo-600/35 text-indigo-400 border border-indigo-500/20"
+                                : "text-zinc-500 hover:text-zinc-350"
+                            }`}
+                          >
+                            Avg Return
+                          </button>
+                          <button
+                            onClick={() => setSeasonalityChartMetric("winRate")}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                              seasonalityChartMetric === "winRate"
+                                ? "bg-indigo-600/35 text-indigo-400 border border-indigo-500/20"
+                                : "text-zinc-500 hover:text-zinc-350"
+                            }`}
+                          >
+                            Win Rate %
+                          </button>
+                        </div>
+                      )}
+
+                      {/* View Mode Toggle Buttons */}
+                      <div className="flex bg-zinc-900/60 p-1 rounded-xl border border-zinc-850">
+                        <button
+                          onClick={() => setHeatmapViewMode("matrix")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                            heatmapViewMode === "matrix"
+                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10 font-bold"
+                              : "text-zinc-450 hover:text-white"
+                          }`}
+                        >
+                          Grid Matrix
+                        </button>
+                        <button
+                          onClick={() => setHeatmapViewMode("calendar")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                            heatmapViewMode === "calendar"
+                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10 font-bold"
+                              : "text-zinc-450 hover:text-white"
+                          }`}
+                        >
+                          Calendar View
+                        </button>
+                        <button
+                          onClick={() => setHeatmapViewMode("chart")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                            heatmapViewMode === "chart"
+                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10 font-bold"
+                              : "text-zinc-450 hover:text-white"
+                          }`}
+                        >
+                          Seasonality Chart
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
-                  <table className="w-full text-left border-collapse min-w-[700px]">
-                    <thead>
-                      <tr className="border-b border-zinc-800 text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                        <th className="py-3 px-2">Year</th>
-                        <th className="py-3 px-2 text-right">Jan</th>
-                        <th className="py-3 px-2 text-right">Feb</th>
-                        <th className="py-3 px-2 text-right">Mar</th>
-                        <th className="py-3 px-2 text-right">Apr</th>
-                        <th className="py-3 px-2 text-right">May</th>
-                        <th className="py-3 px-2 text-right">Jun</th>
-                        <th className="py-3 px-2 text-right">Jul</th>
-                        <th className="py-3 px-2 text-right">Aug</th>
-                        <th className="py-3 px-2 text-right">Sep</th>
-                        <th className="py-3 px-2 text-right">Oct</th>
-                        <th className="py-3 px-2 text-right">Nov</th>
-                        <th className="py-3 px-2 text-right">Dec</th>
-                        <th className="py-3 px-3 text-right bg-zinc-800/40 rounded-t-lg">Annual</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-850 text-xs font-mono">
-                      {heatmapData.map((row) => {
-                        return (
-                          <tr key={row.year} className="hover:bg-zinc-900/20 transition-colors">
-                            <td className="py-2.5 px-2 font-bold text-zinc-300">{row.year}</td>
-                            
+                  {heatmapViewMode === "matrix" ? (
+                    <table className="w-full text-left border-collapse min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-zinc-800 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                          <th className="py-3 px-2">Year</th>
+                          <th className="py-3 px-2 text-right">Jan</th>
+                          <th className="py-3 px-2 text-right">Feb</th>
+                          <th className="py-3 px-2 text-right">Mar</th>
+                          <th className="py-3 px-2 text-right">Apr</th>
+                          <th className="py-3 px-2 text-right">May</th>
+                          <th className="py-3 px-2 text-right">Jun</th>
+                          <th className="py-3 px-2 text-right">Jul</th>
+                          <th className="py-3 px-2 text-right">Aug</th>
+                          <th className="py-3 px-2 text-right">Sep</th>
+                          <th className="py-3 px-2 text-right">Oct</th>
+                          <th className="py-3 px-2 text-right">Nov</th>
+                          <th className="py-3 px-2 text-right">Dec</th>
+                          <th className="py-3 px-3 text-right bg-zinc-800/40 rounded-t-lg">Annual</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-850 text-xs font-mono">
+                        {heatmapData.map((row) => {
+                          return (
+                            <tr key={row.year} className="hover:bg-zinc-900/20 transition-colors">
+                              <td className="py-2.5 px-2 font-bold text-zinc-300">{row.year}</td>
+                              
+                              {monthsKeys.map(key => {
+                                const val = row[key];
+                                return (
+                                  <td
+                                    key={key}
+                                    style={{ backgroundColor: getHeatmapColor(val) }}
+                                    className="py-2.5 px-2 text-right font-medium text-zinc-100 rounded-sm border border-zinc-950/20"
+                                  >
+                                    {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
+                                  </td>
+                                );
+                              })}
+
+                              <td
+                                style={{ backgroundColor: getHeatmapColor(row.total) }}
+                                className="py-2.5 px-3 text-right font-bold text-white bg-zinc-800/20"
+                              >
+                                {row.total !== null ? `${(row.total * 100).toFixed(2)}%` : "-"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {/* Monthly Averages Row */}
+                        {monthlyAverages && (
+                          <tr className="border-t-2 border-zinc-700 bg-zinc-900/60 font-bold text-white">
+                            <td className="py-3 px-2 text-zinc-200 uppercase tracking-wider font-extrabold bg-zinc-900/40">Average</td>
                             {monthsKeys.map(key => {
-                              const val = row[key];
+                              const val = monthlyAverages[key];
                               return (
                                 <td
                                   key={key}
                                   style={{ backgroundColor: getHeatmapColor(val) }}
-                                  className="py-2.5 px-2 text-right font-medium text-zinc-100 rounded-sm border border-zinc-950/20"
+                                  className="py-3 px-2 text-right font-bold text-white rounded-sm border border-zinc-950/25"
                                 >
                                   {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
                                 </td>
                               );
                             })}
-
                             <td
-                              style={{ backgroundColor: getHeatmapColor(row.total) }}
-                              className="py-2.5 px-3 text-right font-bold text-white bg-zinc-800/20"
+                              style={{ backgroundColor: getHeatmapColor(monthlyAverages.total) }}
+                              className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/80"
                             >
-                              {row.total !== null ? `${(row.total * 100).toFixed(2)}%` : "-"}
+                              {monthlyAverages.total !== null ? `${(monthlyAverages.total * 100).toFixed(2)}%` : "-"}
                             </td>
                           </tr>
+                        )}
+
+                        {/* Monthly Totals Row (Cumulative Sum) */}
+                        {monthlyTotals && (
+                          <tr className="border-t border-zinc-850 bg-zinc-900/45 font-bold text-white">
+                            <td className="py-3 px-2 text-zinc-300 uppercase tracking-wider font-extrabold bg-zinc-900/30">Total</td>
+                            {monthsKeys.map(key => {
+                              const val = monthlyTotals[key];
+                              return (
+                                <td
+                                  key={key}
+                                  style={{ backgroundColor: getHeatmapColor(val) }}
+                                  className="py-3 px-2 text-right font-bold text-white rounded-sm border border-zinc-950/20"
+                                >
+                                  {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
+                                </td>
+                              );
+                            })}
+                            <td
+                              style={{ backgroundColor: getHeatmapColor(monthlyTotals.total) }}
+                              className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/70"
+                            >
+                              {monthlyTotals.total !== null ? `${(monthlyTotals.total * 100).toFixed(2)}%` : "-"}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  ) : heatmapViewMode === "calendar" ? (
+                    /* Calendar View: 12 Month Cards Layout */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 mt-4">
+                      {calendarMonths.map(m => {
+                        const yearRow = heatmapData.find(r => r.year === calendarYear);
+                        const monthReturn = yearRow ? yearRow[m.key] : null;
+
+                        const daysInMonth = new Date(calendarYear, m.num, 0).getDate();
+                        const firstDayIdx = new Date(calendarYear, m.num - 1, 1).getDay();
+
+                        const calendarCells: React.ReactNode[] = [];
+
+                        // Pre-padding blank cells for days before the first day of the week
+                        for (let i = 0; i < firstDayIdx; i++) {
+                          calendarCells.push(
+                            <div key={`blank-${i}`} className="aspect-square bg-transparent" />
+                          );
+                        }
+
+                        // Day cells
+                        for (let d = 1; d <= daysInMonth; d++) {
+                          const dateStr = `${d.toString().padStart(2, "0")}-${m.num.toString().padStart(2, "0")}-${calendarYear}`;
+                          const record = dailyDateMap.get(dateStr);
+
+                          if (record) {
+                            const isPositive = record.change > 0;
+                            calendarCells.push(
+                              <div
+                                key={dateStr}
+                                title={`${record.dateStr}\nPrice: $${formatNumber(record.price)}\nChange: ${record.change >= 0 ? "+" : ""}${formatPercent(record.change)}`}
+                                className={`aspect-square flex items-center justify-center rounded-lg text-[10px] font-bold font-mono transition-all duration-150 cursor-help ${
+                                  isPositive
+                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/40"
+                                    : "bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/40"
+                                }`}
+                              >
+                                {d}
+                              </div>
+                            );
+                          } else {
+                            calendarCells.push(
+                              <div
+                                key={`off-${dateStr}`}
+                                className="aspect-square flex items-center justify-center rounded-lg text-[9px] font-medium font-mono bg-zinc-950/20 text-zinc-600 border border-zinc-900/10 cursor-default"
+                              >
+                                {d}
+                              </div>
+                            );
+                          }
+                        }
+
+                        return (
+                          <div key={m.key} className="bg-zinc-950/30 border border-zinc-850 p-4 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition duration-300">
+                            <div>
+                              {/* Card Title & Monthly Return pill */}
+                              <div className="flex justify-between items-center mb-4">
+                                <span className="text-xs font-bold text-zinc-200">{m.label}</span>
+                                {monthReturn !== null ? (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    monthReturn >= 0
+                                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                      : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                  }`}>
+                                    {monthReturn >= 0 ? "+" : ""}
+                                    {(monthReturn * 100).toFixed(2)}%
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono text-zinc-650">-</span>
+                                )}
+                              </div>
+
+                              {/* Weekdays indicator headers */}
+                              <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-extrabold text-zinc-500 uppercase tracking-widest mb-2">
+                                {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
+                                  <div key={idx}>{day}</div>
+                                ))}
+                              </div>
+
+                              {/* Calendar body grid */}
+                              <div className="grid grid-cols-7 gap-1">
+                                {calendarCells}
+                              </div>
+                            </div>
+                          </div>
                         );
                       })}
-
-                      {/* Monthly Averages Row */}
-                      {monthlyAverages && (
-                        <tr className="border-t-2 border-zinc-700 bg-zinc-900/60 font-bold text-white">
-                          <td className="py-3 px-2 text-zinc-200 uppercase tracking-wider font-extrabold bg-zinc-900/40">Average</td>
-                          {monthsKeys.map(key => {
-                            const val = monthlyAverages[key];
-                            return (
-                              <td
-                                key={key}
-                                style={{ backgroundColor: getHeatmapColor(val) }}
-                                className="py-3 px-2 text-right font-bold text-white rounded-sm border border-zinc-950/25"
-                              >
-                                {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
-                              </td>
-                            );
-                          })}
-                          <td
-                            style={{ backgroundColor: getHeatmapColor(monthlyAverages.total) }}
-                            className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/80"
+                    </div>
+                  ) : (
+                    /* Seasonality Chart View: Recharts Bar Chart */
+                    <div className="h-[400px] w-full mt-6 bg-zinc-950/20 p-6 rounded-2xl border border-zinc-850">
+                      <div className="mb-4">
+                        <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-widest font-mono">
+                          S&P 500 Historical Seasonality ({seasonalityChartMetric === "avg" ? "Average Monthly Return" : "Positive Performance Win Rate"})
+                        </h4>
+                      </div>
+                      <ResponsiveContainer width="100%" height="90%">
+                        <BarChart data={monthlyMetrics?.seasonalityData || []}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="label" tickLine={false} tick={{ fill: "#71717a", fontSize: 11 }} />
+                          <YAxis
+                            orientation="right"
+                            tickLine={false}
+                            tick={{ fill: "#71717a", fontSize: 11 }}
+                            tickFormatter={(v) => seasonalityChartMetric === "avg" ? `${(v * 100).toFixed(1)}%` : `${(v * 100).toFixed(0)}%`}
+                          />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }}
+                            formatter={(val: any) => [
+                              seasonalityChartMetric === "avg" ? `${(Number(val) * 100).toFixed(2)}%` : `${(Number(val) * 100).toFixed(1)}%`,
+                              seasonalityChartMetric === "avg" ? "Average Return" : "Win Rate"
+                            ]}
+                          />
+                          <Bar
+                            dataKey={seasonalityChartMetric === "avg" ? "avg" : "winRate"}
+                            name={seasonalityChartMetric === "avg" ? "Average Return" : "Win Rate"}
                           >
-                            {monthlyAverages.total !== null ? `${(monthlyAverages.total * 100).toFixed(2)}%` : "-"}
-                          </td>
-                        </tr>
-                      )}
-
-                      {/* Monthly Totals Row (Cumulative Sum) */}
-                      {monthlyTotals && (
-                        <tr className="border-t border-zinc-850 bg-zinc-900/45 font-bold text-white">
-                          <td className="py-3 px-2 text-zinc-300 uppercase tracking-wider font-extrabold bg-zinc-900/30">Total</td>
-                          {monthsKeys.map(key => {
-                            const val = monthlyTotals[key];
-                            return (
-                              <td
-                                key={key}
-                                style={{ backgroundColor: getHeatmapColor(val) }}
-                                className="py-3 px-2 text-right font-bold text-white rounded-sm border border-zinc-950/20"
-                              >
-                                {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
-                              </td>
-                            );
-                          })}
-                          <td
-                            style={{ backgroundColor: getHeatmapColor(monthlyTotals.total) }}
-                            className="py-3 px-3 text-right font-extrabold text-white bg-zinc-800/70"
-                          >
-                            {monthlyTotals.total !== null ? `${(monthlyTotals.total * 100).toFixed(2)}%` : "-"}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                            {(monthlyMetrics?.seasonalityData || []).map((entry: any, index: number) => {
+                              const val = entry[seasonalityChartMetric === "avg" ? "avg" : "winRate"];
+                              let fill = "#6366f1"; // base indigo
+                              if (seasonalityChartMetric === "avg") {
+                                fill = val >= 0 ? "rgba(16, 185, 129, 0.6)" : "rgba(239, 68, 68, 0.6)";
+                              } else {
+                                fill = val >= 0.5 ? "rgba(99, 102, 241, 0.6)" : "rgba(245, 158, 11, 0.6)";
+                              }
+                              return <Cell key={`cell-${index}`} fill={fill} />;
+                            })}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </div>
 
             {/* Heatmap Seasonality Analytics Cards */}
