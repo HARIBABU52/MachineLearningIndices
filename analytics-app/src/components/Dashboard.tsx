@@ -51,6 +51,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "technical" | "risk" | "heatmap" | "simulations" | "table">("overview");
   const [timeframe, setTimeframe] = useState<"1M" | "6M" | "1Y" | "5Y" | "ALL">("1Y");
+  const [selectedIndicator, setSelectedIndicator] = useState<string>("ema");
   
   // Monte Carlo parameters
   const [simDays, setSimDays] = useState(252);
@@ -105,12 +106,230 @@ export default function Dashboard({ initialData }: DashboardProps) {
     return generateHistogram(filteredData, 0.005);
   }, [filteredData]);
 
+  // Calculate Volume Profile dynamically
+  const volumeProfileData = useMemo(() => {
+    if (filteredData.length === 0) return [];
+    const prices = filteredData.map(d => d.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const range = maxPrice - minPrice;
+    const binCount = 10;
+    const binSize = range / binCount;
+
+    const formatNum = (val: number) => {
+      return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(val);
+    };
+
+    const bins = Array.from({ length: binCount }, (_, i) => {
+      const lower = minPrice + i * binSize;
+      const upper = lower + binSize;
+      return {
+        binLabel: `$${formatNum(lower)} - $${formatNum(upper)}`,
+        minVal: lower,
+        maxVal: upper,
+        volume: 0
+      };
+    });
+
+    filteredData.forEach(d => {
+      for (let i = 0; i < binCount; i++) {
+        if (d.price >= bins[i].minVal && d.price < bins[i].maxVal) {
+          bins[i].volume += d.volume;
+          break;
+        }
+      }
+    });
+
+    return bins;
+  }, [filteredData]);
+
+  // Format large numbers
+  const formatNumber = (val: number) => {
+    return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(val);
+  };
+
+  // Format percentage helper
+  const formatPercent = (val: number) => {
+    return `${(val * 100).toFixed(2)}%`;
+  };
+
+  // Generate Current Signals & Quantitative Summary of the latest day
+  const latestSignals = useMemo(() => {
+    if (filteredData.length === 0) return [];
+    const latest = filteredData[filteredData.length - 1];
+    
+    // 1. EMA
+    const emaStatus = latest.ema20 && latest.ema50
+      ? (latest.ema20 > latest.ema50 ? "Bullish (Uptrend)" : "Bearish (Downtrend)")
+      : "Neutral";
+    const emaColor = emaStatus.startsWith("Bullish") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+
+    // 2. Volume
+    const avgVol = filteredData.reduce((sum, d) => sum + d.volume, 0) / filteredData.length;
+    const volStatus = latest.volume > avgVol * 1.1 ? "Strong Volume" : (latest.volume < avgVol * 0.9 ? "Weak Volume" : "Average Volume");
+    const volColor = latest.volume > avgVol * 1.1 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : (latest.volume < avgVol * 0.9 ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-zinc-800 text-zinc-400 border border-zinc-700");
+
+    // 3. VWAP
+    const vwapStatus = latest.vwap
+      ? (latest.price > latest.vwap ? "Bullish (Above VWAP)" : "Bearish (Below VWAP)")
+      : "Neutral";
+    const vwapColor = latest.price > (latest.vwap || 0) ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+
+    // 4. RSI
+    let rsiStatus = "Neutral";
+    let rsiColor = "bg-zinc-800 text-zinc-400 border border-zinc-700";
+    if (latest.rsi) {
+      if (latest.rsi > 70) {
+        rsiStatus = "Overbought";
+        rsiColor = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+      } else if (latest.rsi < 30) {
+        rsiStatus = "Oversold";
+        rsiColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      }
+    }
+
+    // 5. MACD
+    const macdStatus = latest.macdHist
+      ? (latest.macdHist > 0 ? "Bullish Crossover" : "Bearish Crossover")
+      : "Neutral";
+    const macdColor = (latest.macdHist || 0) > 0 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+
+    // 6. ATR
+    const atrStatus = latest.atr ? `ATR: $${formatNumber(latest.atr)}` : "No Data";
+    const atrColor = "bg-violet-500/10 text-violet-400 border border-violet-500/20";
+
+    // 7. ADX
+    let adxStatus = "Weak Trend";
+    let adxColor = "bg-zinc-800 text-zinc-400 border border-zinc-700";
+    if (latest.adx && latest.plusDI && latest.minusDI) {
+      if (latest.adx > 25) {
+        adxStatus = latest.plusDI > latest.minusDI ? "Strong Uptrend" : "Strong Downtrend";
+        adxColor = latest.plusDI > latest.minusDI ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+      } else if (latest.adx > 20) {
+        adxStatus = "Moderate Trend";
+        adxColor = "bg-amber-500/10 text-amber-400 border border-amber-500/20";
+      }
+    }
+
+    // 8. Bollinger Bands
+    let bbStatus = "Neutral Band";
+    let bbColor = "bg-zinc-800 text-zinc-400 border border-zinc-700";
+    if (latest.bbUpper && latest.bbLower) {
+      if (latest.price >= latest.bbUpper * 0.98) {
+        bbStatus = "Upper Band Touch";
+        bbColor = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+      } else if (latest.price <= latest.bbLower * 1.02) {
+        bbStatus = "Lower Band Touch";
+        bbColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      }
+    }
+
+    // 9. Stochastic
+    let stochStatus = "Neutral";
+    let stochColor = "bg-zinc-800 text-zinc-400 border border-zinc-700";
+    if (latest.stochK) {
+      if (latest.stochK > 80) {
+        stochStatus = "Overbought";
+        stochColor = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+      } else if (latest.stochK < 20) {
+        stochStatus = "Oversold";
+        stochColor = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+      }
+    }
+
+    // 10. Volume Profile Value Area (Price range where most volume is concentrated)
+    let maxBinLabel = "";
+    if (volumeProfileData.length > 0) {
+      const sortedProfile = [...volumeProfileData].sort((a, b) => b.volume - a.volume);
+      maxBinLabel = sortedProfile[0]?.binLabel || "";
+    }
+
+    return [
+      { id: "ema", name: "EMA (20 & 50)", value: `EMA20: $${formatNumber(latest.ema20 || 0)} / EMA50: $${formatNumber(latest.ema50 || 0)}`, status: emaStatus, color: emaColor },
+      { id: "volume", name: "Volume", value: `Vol: ${formatNumber(latest.volume)} (Avg: ${formatNumber(avgVol)})`, status: volStatus, color: volColor },
+      { id: "vwap", name: "VWAP (20d)", value: `Price: $${formatNumber(latest.price)} / VWAP: $${formatNumber(latest.vwap || 0)}`, status: vwapStatus, color: vwapColor },
+      { id: "rsi", name: "RSI (14)", value: `RSI: ${latest.rsi ? latest.rsi.toFixed(2) : "N/A"}`, status: rsiStatus, color: rsiColor },
+      { id: "macd", name: "MACD (12, 26, 9)", value: `MACD: ${latest.macd ? latest.macd.toFixed(2) : "N/A"} (Hist: ${latest.macdHist ? latest.macdHist.toFixed(2) : "N/A"})`, status: macdStatus, color: macdColor },
+      { id: "atr", name: "ATR (14)", value: `True Range price swing volatility`, status: atrStatus, color: atrColor },
+      { id: "adx", name: "ADX (14)", value: `ADX: ${latest.adx ? latest.adx.toFixed(2) : "N/A"} (+DI: ${latest.plusDI ? latest.plusDI.toFixed(1) : "N/A"} / -DI: ${latest.minusDI ? latest.minusDI.toFixed(1) : "N/A"})`, status: adxStatus, color: adxColor },
+      { id: "bollinger", name: "Bollinger Bands (20,2)", value: `Upper: $${formatNumber(latest.bbUpper || 0)} / Lower: $${formatNumber(latest.bbLower || 0)}`, status: bbStatus, color: bbColor },
+      { id: "stochastic", name: "Stochastic (14,3)", value: `%K: ${latest.stochK ? latest.stochK.toFixed(1) : "N/A"} / %D: ${latest.stochD ? latest.stochD.toFixed(1) : "N/A"}`, status: stochStatus, color: stochColor },
+      { id: "profile", name: "Volume Profile", value: `Max Concentrated price zone`, status: maxBinLabel, color: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" }
+    ];
+  }, [filteredData, volumeProfileData]);
+
+  // Indicator definitions and descriptions
+  const activeIndicatorInfo = useMemo(() => {
+    const infos: Record<string, { title: string; desc: string; interpretation: string; helps: string }> = {
+      ema: {
+        title: "EMA (Exponential Moving Average 20 & 50)",
+        desc: "Filters out market noise to show the primary price trend direction.",
+        interpretation: "EMA20 above EMA50 indicates an uptrend (Bullish). EMA20 below EMA50 indicates a downtrend (Bearish).",
+        helps: "How it helps: Helps traders identify trend start and end points without getting caught in short-term volatility whipsaws."
+      },
+      volume: {
+        title: "Volume (Implied Activity)",
+        desc: "Tracks the strength behind price movements based on daily volatility ranges.",
+        interpretation: "High volume during upward price moves confirms strong buying support. Price moves on low volume suggest a weak breakout.",
+        helps: "How it helps: Prevents buying into false breakouts. Valid breakouts are always backed by high activity."
+      },
+      vwap: {
+        title: "VWAP (Volume Weighted Average Price - 20 day)",
+        desc: "Reflects the true average price institutions are buying and selling at.",
+        interpretation: "Price above VWAP indicates buyers are in control. Price below VWAP indicates sellers are in control.",
+        helps: "How it helps: Institutions use VWAP to gauge execution quality. Buying below VWAP means you got a better-than-average price."
+      },
+      rsi: {
+        title: "RSI (Relative Strength Index - 14)",
+        desc: "Measures momentum speed and change of price movements.",
+        interpretation: "Above 70 = Overbought (due for cooling or reversal). Below 30 = Oversold (potentially undervalued). Around 50 = Neutral.",
+        helps: "How it helps: Highlights overextended markets, alerting traders to potential top/bottom reversal zones."
+      },
+      macd: {
+        title: "MACD (Moving Average Convergence Divergence)",
+        desc: "Reveals trend momentum strength and potential reversal crossovers.",
+        interpretation: "MACD line crosses above Signal line = Bullish crossover (Buy momentum). MACD line crosses below Signal line = Bearish crossover (Sell momentum).",
+        helps: "How it helps: Provides early signals of trend changes before they fully manifest in the price charts."
+      },
+      atr: {
+        title: "ATR (Average True Range - 14)",
+        desc: "Measures overall market volatility without indicating trend direction.",
+        interpretation: "High ATR = Big price swings. Low ATR = Quiet, range-bound market.",
+        helps: "How it helps: Essential for placing stop-losses. Set stops wider during high ATR periods to avoid being prematurely stopped out."
+      },
+      adx: {
+        title: "ADX (Average Directional Index - 14)",
+        desc: "Measures the strength of a trend regardless of whether it is going up or down.",
+        interpretation: "ADX above 25 indicates a strong trend. Below 20 indicates a sideways, trendless market.",
+        helps: "How it helps: Prevents trading trend-following strategies during sideways markets, saving traders from unnecessary losses."
+      },
+      bollinger: {
+        title: "Bollinger Bands (20, 2)",
+        desc: "Plots volatility bands above and below a moving average baseline.",
+        interpretation: "Touch upper band = Overbought/Overextended. Touch lower band = Oversold/Undervalued. Band squeeze indicates a breakout is coming.",
+        helps: "How it helps: Squeezes are often followed by violent price breakouts. Shows price extremes in relation to standard deviation."
+      },
+      stochastic: {
+        title: "Stochastic Oscillator (14, 3)",
+        desc: "Compares a closing price to its price range over a given time period.",
+        interpretation: "Above 80 = Overbought (due to reverse down). Below 20 = Oversold (due to reverse up). Crossover of %K and %D serves as entry signal.",
+        helps: "How it helps: Extremely effective in range-bound markets for pinpointing short-term cycle turning points."
+      },
+      profile: {
+        title: "Volume Profile (Price-Volume Distribution)",
+        desc: "Shows trading volume traded at specific price levels rather than over time.",
+        interpretation: "High-volume areas = Strong support/resistance walls. Low-volume areas = Price moves quickly through them.",
+        helps: "How it helps: Helps traders place highly accurate profit targets and stop-losses near structural volume walls."
+      }
+    };
+    return infos[selectedIndicator] || infos.ema;
+  }, [selectedIndicator]);
+
   // Run Monte Carlo Simulation when parameters change
   const triggerSimulation = () => {
     if (filteredData.length === 0) return;
     const latestRecord = filteredData[filteredData.length - 1];
     
-    // Use CAGR and volatility from filtered timeframe to project
     const results = runMonteCarlo(
       latestRecord.price,
       stats.cagr,
@@ -119,7 +338,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
       simPathsCount
     );
 
-    // Reformat for Recharts multiple line plotting
     const chartData = Array.from({ length: simDays + 1 }, (_, dayIndex) => {
       const dataPoint: any = { day: dayIndex };
       results.forEach(path => {
@@ -137,16 +355,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
       triggerSimulation();
     }
   }, [filteredData, simDays, simPathsCount]);
-
-  // Format percentage helper
-  const formatPercent = (val: number) => {
-    return `${(val * 100).toFixed(2)}%`;
-  };
-
-  // Format large numbers
-  const formatNumber = (val: number) => {
-    return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(val);
-  };
 
   // Table pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -463,96 +671,200 @@ export default function Dashboard({ initialData }: DashboardProps) {
             </div>
           )}
 
-          {/* Tab 2: Technical Indicators (RSI & MACD) */}
+          {/* Tab 2: Technical Indicators Studio (10 Indicators) */}
           {activeTab === "technical" && (
-            <div className="grid grid-cols-1 gap-6">
-              {/* RSI Chart */}
+            <div className="space-y-8">
+              {/* Section A: Latest Signals & Quantitative Summary */}
               <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg">
                 <div className="mb-4">
-                  <h3 className="text-lg font-bold text-zinc-100">Relative Strength Index (RSI - 14)</h3>
-                  <p className="text-xs text-zinc-400">Momentum oscillator showing overbought (&gt;70) and oversold (&lt;30) signals</p>
+                  <h3 className="text-lg font-bold text-zinc-100">Live Indicator Signals & Quantitative Summary</h3>
+                  <p className="text-xs text-zinc-400">Current trading session indicator values and automatically generated directional status</p>
                 </div>
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                      <XAxis
-                        dataKey="dateStr"
-                        tickFormatter={(v) => {
-                          const parts = v.split("-");
-                          return parts.length === 3 ? `${parts[1]}/${parts[2].slice(2)}` : v;
-                        }}
-                        tickLine={false}
-                        tick={{ fill: "#71717a", fontSize: 10 }}
-                      />
-                      <YAxis
-                        domain={[0, 100]}
-                        tickLine={false}
-                        tick={{ fill: "#71717a", fontSize: 10 }}
-                        ticks={[30, 50, 70]}
-                        orientation="right"
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "12px", color: "#f4f4f5" }}
-                        formatter={(val: any) => [Number(val).toFixed(2), "RSI"]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="rsi"
-                        name="RSI"
-                        stroke="#f59e0b"
-                        strokeWidth={1.5}
-                        dot={false}
-                        activeDot={{ r: 4 }}
-                      />
-                      {/* Overbought and Oversold lines */}
-                      <Line dataKey={() => 70} stroke="#ef4444" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} />
-                      <Line dataKey={() => 30} stroke="#10b981" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {latestSignals.map((sig) => (
+                    <button
+                      key={sig.id}
+                      onClick={() => setSelectedIndicator(sig.id)}
+                      className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between h-28 ${
+                        selectedIndicator === sig.id
+                          ? "bg-zinc-800/80 border-indigo-500 shadow-md shadow-indigo-500/5"
+                          : "bg-zinc-950/40 border-zinc-850 hover:bg-zinc-900/40 hover:border-zinc-800"
+                      }`}
+                    >
+                      <div>
+                        <h4 className="text-xs font-bold text-zinc-300 leading-tight">{sig.name}</h4>
+                        <p className="text-[10px] font-mono text-zinc-500 truncate mt-1">{sig.value}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-2 self-start ${sig.color}`}>
+                        {sig.status}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* MACD Chart */}
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg">
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold text-zinc-100">MACD (Moving Average Convergence Divergence)</h3>
-                  <p className="text-xs text-zinc-400">Trend-following momentum indicator displaying relationship between two moving averages</p>
+              {/* Section B: Charting Studio */}
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* List of Indicators (Navigation) */}
+                <div className="lg:col-span-1 flex flex-col gap-2 bg-zinc-900/10 p-2 rounded-2xl border border-zinc-850">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase px-3 py-1.5 tracking-wider">Select Indicator Studio</span>
+                  {[
+                    { id: "ema", name: "1. EMA (20 & 50)" },
+                    { id: "volume", name: "2. Volume" },
+                    { id: "vwap", name: "3. VWAP" },
+                    { id: "rsi", name: "4. RSI (14)" },
+                    { id: "macd", name: "5. MACD" },
+                    { id: "atr", name: "6. ATR (14)" },
+                    { id: "adx", name: "7. ADX (14)" },
+                    { id: "bollinger", name: "8. Bollinger Bands" },
+                    { id: "stochastic", name: "9. Stochastic Oscillator" },
+                    { id: "profile", name: "10. Volume Profile" }
+                  ].map((ind) => (
+                    <button
+                      key={ind.id}
+                      onClick={() => setSelectedIndicator(ind.id)}
+                      className={`text-left px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${
+                        selectedIndicator === ind.id
+                          ? "bg-indigo-600 text-white font-bold"
+                          : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
+                      }`}
+                    >
+                      {ind.name}
+                    </button>
+                  ))}
                 </div>
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                      <XAxis
-                        dataKey="dateStr"
-                        tickFormatter={(v) => {
-                          const parts = v.split("-");
-                          return parts.length === 3 ? `${parts[1]}/${parts[2].slice(2)}` : v;
-                        }}
-                        tickLine={false}
-                        tick={{ fill: "#71717a", fontSize: 10 }}
-                      />
-                      <YAxis tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} orientation="right" />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "12px", color: "#f4f4f5" }}
-                        formatter={(val: any) => [Number(val).toFixed(2), "Value"]}
-                      />
-                      <Legend verticalAlign="top" height={36} iconType="circle" />
-                      <Bar dataKey="macdHist" name="MACD Histogram" fill="#a1a1aa">
-                        {filteredData.map((entry, index) => {
-                          const value = entry.macdHist || 0;
-                          return (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={value >= 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)"}
-                            />
-                          );
-                        })}
-                      </Bar>
-                      <Line type="monotone" dataKey="macd" name="MACD Line" stroke="#6366f1" strokeWidth={1.5} dot={false} />
-                      <Line type="monotone" dataKey="macdSignal" name="Signal Line" stroke="#ec4899" strokeWidth={1.5} dot={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+
+                {/* Main Interactive Studio Chart */}
+                <div className="lg:col-span-3 rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-6 backdrop-blur-md shadow-lg flex flex-col justify-between">
+                  <div className="mb-6 space-y-2">
+                    <h3 className="text-lg font-bold text-zinc-100">{activeIndicatorInfo.title}</h3>
+                    <p className="text-xs text-indigo-400 leading-relaxed font-semibold">{activeIndicatorInfo.desc}</p>
+                    <p className="text-xs text-zinc-400 leading-relaxed">{activeIndicatorInfo.interpretation}</p>
+                    
+                    <div className="bg-zinc-950/40 border border-zinc-850/60 p-3 rounded-xl flex items-start gap-2 mt-3">
+                      <Info className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-zinc-300 font-mono leading-relaxed">{activeIndicatorInfo.helps}</p>
+                    </div>
+                  </div>
+
+                  <div className="h-[320px] w-full mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      {selectedIndicator === "ema" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis domain={["auto", "auto"]} orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [`$${formatNumber(Number(val))}`, "Price"]} />
+                          <Legend verticalAlign="top" height={36} iconType="circle" />
+                          <Line type="monotone" dataKey="price" name="S&P 500 Price" stroke="#6366f1" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="ema20" name="20-day EMA" stroke="#f59e0b" strokeWidth={1.2} dot={false} />
+                          <Line type="monotone" dataKey="ema50" name="50-day EMA" stroke="#ec4899" strokeWidth={1.2} dot={false} />
+                        </LineChart>
+                      ) : selectedIndicator === "volume" ? (
+                        <BarChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [formatNumber(Number(val)), "Implied Activity"]} />
+                          <Bar dataKey="volume" name="Trading Volume" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      ) : selectedIndicator === "vwap" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis domain={["auto", "auto"]} orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [`$${formatNumber(Number(val))}`, "Price"]} />
+                          <Legend verticalAlign="top" height={36} iconType="circle" />
+                          <Line type="monotone" dataKey="price" name="S&P 500 Price" stroke="#6366f1" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="vwap" name="VWAP (20d)" stroke="#10b981" strokeWidth={1.5} dot={false} />
+                        </LineChart>
+                      ) : selectedIndicator === "rsi" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis domain={[0, 100]} ticks={[30, 50, 70]} orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [Number(val).toFixed(2), "RSI"]} />
+                          <Line type="monotone" dataKey="rsi" name="RSI (14)" stroke="#f59e0b" strokeWidth={1.5} dot={false} />
+                          <Line dataKey={() => 70} stroke="#ef4444" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} />
+                          <Line dataKey={() => 30} stroke="#10b981" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} />
+                        </LineChart>
+                      ) : selectedIndicator === "macd" ? (
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [Number(val).toFixed(2), "Value"]} />
+                          <Legend verticalAlign="top" height={36} iconType="circle" />
+                          <Bar dataKey="macdHist" name="MACD Histogram" fill="#a1a1aa">
+                            {filteredData.map((entry, index) => {
+                              const value = entry.macdHist || 0;
+                              return (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={value >= 0 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)"}
+                                />
+                              );
+                            })}
+                          </Bar>
+                          <Line type="monotone" dataKey="macd" name="MACD Line" stroke="#6366f1" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="macdSignal" name="Signal Line" stroke="#ec4899" strokeWidth={1.5} dot={false} />
+                        </ComposedChart>
+                      ) : selectedIndicator === "atr" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [`$${Number(val).toFixed(2)}`, "ATR"]} />
+                          <Line type="monotone" dataKey="atr" name="ATR (14)" stroke="#a855f7" strokeWidth={1.5} dot={false} />
+                        </LineChart>
+                      ) : selectedIndicator === "adx" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis domain={[0, 100]} orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [Number(val).toFixed(2), "Value"]} />
+                          <Legend verticalAlign="top" height={36} iconType="circle" />
+                          <Line type="monotone" dataKey="adx" name="ADX" stroke="#a855f7" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="plusDI" name="+DI" stroke="#10b981" strokeWidth={1} dot={false} />
+                          <Line type="monotone" dataKey="minusDI" name="-DI" stroke="#ef4444" strokeWidth={1} dot={false} />
+                        </LineChart>
+                      ) : selectedIndicator === "bollinger" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis domain={["auto", "auto"]} orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [`$${formatNumber(Number(val))}`, "Value"]} />
+                          <Legend verticalAlign="top" height={36} iconType="circle" />
+                          <Line type="monotone" dataKey="price" name="S&P 500 Price" stroke="#6366f1" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="bbUpper" name="Upper Band" stroke="#ec4899" strokeWidth={1} strokeDasharray="3 3" dot={false} />
+                          <Line type="monotone" dataKey="bbMiddle" name="Middle Band" stroke="#f59e0b" strokeWidth={1.2} dot={false} />
+                          <Line type="monotone" dataKey="bbLower" name="Lower Band" stroke="#ec4899" strokeWidth={1} strokeDasharray="3 3" dot={false} />
+                        </LineChart>
+                      ) : selectedIndicator === "stochastic" ? (
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="dateStr" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis domain={[0, 100]} ticks={[20, 50, 80]} orientation="right" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [Number(val).toFixed(2), "Value"]} />
+                          <Legend verticalAlign="top" height={36} iconType="circle" />
+                          <Line type="monotone" dataKey="stochK" name="%K Line" stroke="#10b981" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="stochD" name="%D Signal" stroke="#ec4899" strokeWidth={1.5} dot={false} />
+                          <Line dataKey={() => 80} stroke="#ef4444" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} />
+                          <Line dataKey={() => 20} stroke="#10b981" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} />
+                        </LineChart>
+                      ) : (
+                        // Volume Profile (Horizontal Distribution)
+                        <BarChart data={volumeProfileData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+                          <XAxis type="number" orientation="top" tickLine={false} tick={{ fill: "#71717a", fontSize: 10 }} />
+                          <YAxis type="category" dataKey="binLabel" tickLine={false} tick={{ fill: "#71717a", fontSize: 9 }} width={120} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#f4f4f5" }} formatter={(val: any) => [formatNumber(Number(val)), "Volume"]} />
+                          <Bar dataKey="volume" name="Traded Volume" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
             </div>
