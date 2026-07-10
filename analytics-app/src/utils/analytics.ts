@@ -225,19 +225,19 @@ export function calculateSummaryStats(records: CleanRecord[]): SummaryStats {
 // Generate Monthly & Annual returns matrix
 export interface HeatmapRow {
   year: number;
-  jan: number;
-  feb: number;
-  mar: number;
-  apr: number;
-  may: number;
-  jun: number;
-  jul: number;
-  aug: number;
-  sep: number;
-  oct: number;
-  nov: number;
-  dec: number;
-  total: number;
+  jan: number | null;
+  feb: number | null;
+  mar: number | null;
+  apr: number | null;
+  may: number | null;
+  jun: number | null;
+  jul: number | null;
+  aug: number | null;
+  sep: number | null;
+  oct: number | null;
+  nov: number | null;
+  dec: number | null;
+  total: number | null;
 }
 
 export function generateMonthlyHeatmap(records: CleanRecord[]): HeatmapRow[] {
@@ -252,7 +252,7 @@ export function generateMonthlyHeatmap(records: CleanRecord[]): HeatmapRow[] {
   const heatmap: HeatmapRow[] = [];
 
   years.forEach(year => {
-    const row: any = { year, total: 0 };
+    const row: any = { year, total: null };
     
     // Group records for this year
     const yearRecords = records.filter(r => {
@@ -277,7 +277,7 @@ export function generateMonthlyHeatmap(records: CleanRecord[]): HeatmapRow[] {
         const endPrice = monthRecords[monthRecords.length - 1].price;
         row[key] = (endPrice - startPrice) / startPrice;
       } else {
-        row[key] = 0;
+        row[key] = null;
       }
     }
 
@@ -287,7 +287,7 @@ export function generateMonthlyHeatmap(records: CleanRecord[]): HeatmapRow[] {
       const endPrice = yearRecords[yearRecords.length - 1].price;
       row.total = (endPrice - startPrice) / startPrice;
     } else {
-      row.total = 0;
+      row.total = null;
     }
 
     heatmap.push(row);

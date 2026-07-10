@@ -660,8 +660,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
                 </thead>
                 <tbody className="divide-y divide-zinc-850 text-xs font-mono">
                   {heatmapData.map((row) => {
-                    const getHeatmapColor = (val: number) => {
-                      if (!val || val === 0) return "rgba(39, 39, 42, 0.4)";
+                    const getHeatmapColor = (val: number | null) => {
+                      if (val === null || val === 0) return "rgba(39, 39, 42, 0.4)";
                       if (val > 0) {
                         const opacity = Math.min(0.1 + val * 3, 0.75);
                         return `rgba(16, 185, 129, ${opacity})`;
@@ -688,7 +688,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
                               style={{ backgroundColor: getHeatmapColor(val) }}
                               className="py-2.5 px-2 text-right font-medium text-zinc-100 rounded-sm border border-zinc-950/20"
                             >
-                              {val !== 0 ? `${(val * 100).toFixed(2)}%` : "-"}
+                              {val !== null ? `${(val * 100).toFixed(2)}%` : "-"}
                             </td>
                           );
                         })}
@@ -697,7 +697,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
                           style={{ backgroundColor: getHeatmapColor(row.total) }}
                           className="py-2.5 px-3 text-right font-bold text-white bg-zinc-800/20"
                         >
-                          {row.total !== 0 ? `${(row.total * 100).toFixed(2)}%` : "-"}
+                          {row.total !== null ? `${(row.total * 100).toFixed(2)}%` : "-"}
                         </td>
                       </tr>
                     );
