@@ -1,6 +1,6 @@
 [build]
   base = "analytics-app"
-  publish = "analytics-app/.next"
+  publish = ".next"
   command = "npm run build"
 
 [build.environment]
