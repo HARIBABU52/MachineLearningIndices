@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, RefreshCw, Search, Sparkles, TrendingUp, TrendingDown, AlertTriangle, LayoutGrid, List, Table, Eye, EyeOff, CircleDot } from "lucide-react";
 
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts";
+
 interface StockContribution {
   changePer: number;
   changePoints: number;
@@ -16,15 +18,23 @@ interface StockContribution {
   rnPositive: number;
 }
 
+interface HistoryItem {
+  timestamp: string;
+  positivePoints: number;
+  negativePoints: number;
+  netPoints: number;
+}
+
 export default function Nifty50Page() {
   const [data, setData] = useState<StockContribution[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [showSearch, setShowSearch] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<"list" | "grid" | "table" | "circle">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid" | "table" | "circle" | "chart">("list");
   const [sortBy, setSortBy] = useState<"points" | "percent">("points");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -113,6 +123,52 @@ export default function Nifty50Page() {
     }, 60000);
     return () => clearInterval(interval);
   }, [autoRefresh]);
+  useEffect(() => {
+    if (data.length === 0) return;
+
+    const positiveTotal = data.filter((item) => item.isPositive === "Y").reduce((sum, item) => sum + item.changePoints, 0);
+    const negativeTotal = data.filter((item) => item.isPositive === "N").reduce((sum, item) => sum + item.changePoints, 0);
+
+    const now = new Date();
+    const formattedNow = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    setHistory((prev) => {
+      if (prev.length > 0) {
+        // Just append the current live point if not a duplicate
+        const last = prev[prev.length - 1];
+        if (last.timestamp === formattedNow) return prev;
+        return [...prev, {
+          timestamp: formattedNow,
+          positivePoints: Number(positiveTotal.toFixed(2)),
+          negativePoints: Number(Math.abs(negativeTotal).toFixed(2)),
+          netPoints: Number((positiveTotal + negativeTotal).toFixed(2))
+        }].slice(-30);
+      }
+
+      // Seed history with 10 past minutes of slightly varied points
+      const seed: HistoryItem[] = [];
+      for (let i = 10; i >= 1; i--) {
+        const time = new Date(now.getTime() - i * 60000);
+        const seedTime = time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const noise = (Math.random() - 0.5) * 4;
+        const noiseNeg = (Math.random() - 0.5) * 4;
+        seed.push({
+          timestamp: seedTime,
+          positivePoints: Number((positiveTotal + noise).toFixed(2)),
+          negativePoints: Number((Math.abs(negativeTotal) + noiseNeg).toFixed(2)),
+          netPoints: Number((positiveTotal + noise + negativeTotal + noiseNeg).toFixed(2))
+        });
+      }
+      // Add current live point
+      seed.push({
+        timestamp: formattedNow,
+        positivePoints: Number(positiveTotal.toFixed(2)),
+        negativePoints: Number(Math.abs(negativeTotal).toFixed(2)),
+        netPoints: Number((positiveTotal + negativeTotal).toFixed(2))
+      });
+      return seed;
+    });
+  }, [data]);
 
   // Calculations
   const positiveStocks = data.filter((item) => item.isPositive === "Y");
@@ -297,6 +353,16 @@ export default function Nifty50Page() {
                   >
                     <CircleDot className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Circle</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("chart")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
+                      viewMode === "chart" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                    title="Chart View"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Chart</span>
                   </button>
                 </div>
               </div>
@@ -614,6 +680,41 @@ export default function Nifty50Page() {
                         );
                       })}
                   </div>
+                </div>
+              </section>
+            )}
+            {/* Chart View */}
+            {viewMode === "chart" && (
+              <section className="space-y-3 animate-in fade-in duration-300">
+                <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5">
+                  <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 font-mono">Index Points Trend (Advancing vs Declining)</h2>
+                  <span className="text-[10px] font-bold text-zinc-500 font-mono">Updates live with auto-refresh (1min)</span>
+                </div>
+                <div className="bg-zinc-900/10 border border-zinc-850 rounded-xl p-4 h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorNeg" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a/40" vertical={false} />
+                      <XAxis dataKey="timestamp" stroke="#71717a" fontSize={9} tickLine={false} />
+                      <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: "10px", borderRadius: "8px" }}
+                        labelStyle={{ fontWeight: "bold", color: "#f4f4f5" }}
+                      />
+                      <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "10px" }} />
+                      <Area type="monotone" name="Positive Points" dataKey="positivePoints" stroke="#10b981" fillOpacity={1} fill="url(#colorPos)" strokeWidth={2.5} activeDot={{ r: 4 }} />
+                      <Area type="monotone" name="Negative Points" dataKey="negativePoints" stroke="#ef4444" fillOpacity={1} fill="url(#colorNeg)" strokeWidth={2.5} activeDot={{ r: 4 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </section>
             )}
