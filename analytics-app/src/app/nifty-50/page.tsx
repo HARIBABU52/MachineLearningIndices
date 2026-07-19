@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, RefreshCw, Search, Sparkles, TrendingUp, TrendingDown, AlertTriangle, LayoutGrid, List, Table, Eye, EyeOff, CircleDot } from "lucide-react";
 
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts";
+import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts";
 
 interface StockContribution {
   changePer: number;
@@ -692,7 +692,7 @@ export default function Nifty50Page() {
                 </div>
                 <div className="bg-zinc-900/10 border border-zinc-850 rounded-xl p-4 h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <ComposedChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
@@ -713,7 +713,8 @@ export default function Nifty50Page() {
                       <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "10px" }} />
                       <Area type="monotone" name="Positive Points" dataKey="positivePoints" stroke="#10b981" fillOpacity={1} fill="url(#colorPos)" strokeWidth={2.5} activeDot={{ r: 4 }} />
                       <Area type="monotone" name="Negative Points" dataKey="negativePoints" stroke="#ef4444" fillOpacity={1} fill="url(#colorNeg)" strokeWidth={2.5} activeDot={{ r: 4 }} />
-                    </AreaChart>
+                      <Line type="monotone" name="Net Points" dataKey="netPoints" stroke="#fbbf24" strokeWidth={3} dot={{ r: 2.5 }} activeDot={{ r: 4.5 }} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </section>
