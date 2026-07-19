@@ -54,6 +54,23 @@ export default function Nifty50Page() {
     let lastError = "";
 
     try {
+      // First attempt: try direct Netlify proxy route
+      try {
+        console.log("Attempting direct Netlify CDN rewrite fetch via /api/nifty-contribution...");
+        const directRes = await fetch("/api/nifty-contribution");
+        if (directRes.ok) {
+          const json = await directRes.json();
+          if (json && json.data) {
+            setData(json.data);
+            console.log("Successfully loaded Nifty 50 data directly via Netlify CDN rewrite");
+            return; // Success! Exit the function.
+          }
+        }
+        console.log("Direct Netlify CDN rewrite returned non-OK status. Falling back to public CORS proxies...");
+      } catch (err: any) {
+        console.log("Direct Netlify CDN rewrite fetch failed. Falling back to public CORS proxies...", err.message || err);
+      }
+
       for (const proxy of proxies) {
         try {
           console.log(`Attempting to fetch Nifty 50 data via ${proxy.name}...`);
