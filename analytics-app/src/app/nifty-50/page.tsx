@@ -28,6 +28,11 @@ interface HistoryItem {
   reliance: number;
   airtel: number;
   lt: number;
+  hdfcPct: number;
+  iciciPct: number;
+  reliancePct: number;
+  airtelPct: number;
+  ltPct: number;
 }
 
 const getISTDateTime = () => {
@@ -66,6 +71,7 @@ export default function Nifty50Page() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [historyDates, setHistoryDates] = useState<string[]>([]);
+  const [heavyweightMetric, setHeavyweightMetric] = useState<"points" | "percent">("points");
 
   const fetchData = async () => {
     setLoading(true);
@@ -167,6 +173,12 @@ export default function Nifty50Page() {
       return stock ? Number(stock.changePoints.toFixed(2)) : 0;
     };
 
+    // Helper to find stock percentage changes
+    const getPct = (symbol: string) => {
+      const stock = data.find((s) => s.icSymbol === symbol);
+      return stock ? Number(stock.changePer.toFixed(2)) : 0;
+    };
+
     const positiveTotal = data.filter((item) => item.isPositive === "Y").reduce((sum, item) => sum + item.changePoints, 0);
     const negativeTotal = data.filter((item) => item.isPositive === "N").reduce((sum, item) => sum + item.changePoints, 0);
 
@@ -175,6 +187,12 @@ export default function Nifty50Page() {
     const relianceVal = getPoints("RELIANCE");
     const airtelVal = getPoints("BHARTIAIRTEL");
     const ltVal = getPoints("LT");
+
+    const hdfcPctVal = getPct("HDFCBANK");
+    const iciciPctVal = getPct("ICICIBANK");
+    const reliancePctVal = getPct("RELIANCE");
+    const airtelPctVal = getPct("BHARTIAIRTEL");
+    const ltPctVal = getPct("LT");
 
     // Load existing history map from localStorage
     let storedHistory: { [key: string]: HistoryItem[] } = {};
@@ -195,11 +213,13 @@ export default function Nifty50Page() {
     // Seed the current date history if empty
     if (!storedHistory[dateStr]) {
       const seed: HistoryItem[] = [];
-      const baseTime = new Date();
-      // Generate 10 seed ticks going back 10 minutes (simulating market hours)
-      for (let i = 10; i >= 1; i--) {
-        const time = new Date(baseTime.getTime() - i * 60000);
-        const timeString = time.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+      const seedBase = new Date();
+      seedBase.setHours(9, 15, 0, 0); // Start precisely at 9:15 AM IST market open
+      
+      // Generate 10 seed ticks spaced out starting from 9:15 AM
+      for (let i = 0; i < 10; i++) {
+        const tickTime = new Date(seedBase.getTime() + i * 5 * 60000); // 5-minute ticks (9:15, 9:20, 9:25, etc.)
+        const timeString = tickTime.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
         const noise = (Math.random() - 0.5) * 4;
         const noiseNeg = (Math.random() - 0.5) * 4;
         seed.push({
@@ -211,7 +231,12 @@ export default function Nifty50Page() {
           icici: Number((iciciVal + (Math.random() - 0.5) * 1).toFixed(2)),
           reliance: Number((relianceVal + (Math.random() - 0.5) * 1.5).toFixed(2)),
           airtel: Number((airtelVal + (Math.random() - 0.5) * 0.8).toFixed(2)),
-          lt: Number((ltVal + (Math.random() - 0.5) * 0.8).toFixed(2))
+          lt: Number((ltVal + (Math.random() - 0.5) * 0.8).toFixed(2)),
+          hdfcPct: Number((hdfcPctVal + (Math.random() - 0.5) * 0.5).toFixed(2)),
+          iciciPct: Number((iciciPctVal + (Math.random() - 0.5) * 0.5).toFixed(2)),
+          reliancePct: Number((reliancePctVal + (Math.random() - 0.5) * 0.5).toFixed(2)),
+          airtelPct: Number((airtelPctVal + (Math.random() - 0.5) * 0.5).toFixed(2)),
+          ltPct: Number((ltPctVal + (Math.random() - 0.5) * 0.5).toFixed(2))
         });
       }
       // Add current live tick
@@ -224,7 +249,12 @@ export default function Nifty50Page() {
         icici: iciciVal,
         reliance: relianceVal,
         airtel: airtelVal,
-        lt: ltVal
+        lt: ltVal,
+        hdfcPct: hdfcPctVal,
+        iciciPct: iciciPctVal,
+        reliancePct: reliancePctVal,
+        airtelPct: airtelPctVal,
+        ltPct: ltPctVal
       });
       storedHistory[dateStr] = seed;
     } else if (isMarketHours) {
@@ -241,10 +271,15 @@ export default function Nifty50Page() {
           icici: iciciVal,
           reliance: relianceVal,
           airtel: airtelVal,
-          lt: ltVal
+          lt: ltVal,
+          hdfcPct: hdfcPctVal,
+          iciciPct: iciciPctVal,
+          reliancePct: reliancePctVal,
+          airtelPct: airtelPctVal,
+          ltPct: ltPctVal
         });
-        // Keep last 60 ticks per day
-        storedHistory[dateStr] = dayHistory.slice(-60);
+        // Keep all ticks per day so that the chart always starts from 9:15 AM
+        storedHistory[dateStr] = dayHistory;
       }
     }
 
@@ -435,16 +470,6 @@ export default function Nifty50Page() {
                     <span className="hidden sm:inline">Table</span>
                   </button>
                   <button
-                    onClick={() => setViewMode("circle")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
-                      viewMode === "circle" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
-                    }`}
-                    title="Circle View"
-                  >
-                    <CircleDot className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Circle</span>
-                  </button>
-                  <button
                     onClick={() => setViewMode("chart")}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
                       viewMode === "chart" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
@@ -477,21 +502,21 @@ export default function Nifty50Page() {
 
             {/* List View */}
             {viewMode === "list" && (
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <section className="grid grid-cols-2 gap-2 sm:gap-4">
                 {/* Positive Side */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                      <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-350 font-mono">
-                        Advancing Side ({filteredPositive.length} - {((filteredPositive.length / (data.length || 1)) * 100).toFixed(0)}%) • <span className="text-emerald-400">+{positiveTotal.toFixed(2)} pts</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                      <h2 className="text-[9px] sm:text-[11px] font-bold uppercase tracking-wider text-zinc-350 font-mono">
+                        Advancing Side ({filteredPositive.length}) • <span className="text-emerald-400">+{positiveTotal.toFixed(1)}</span>
                       </h2>
                     </div>
                   </div>
 
                   <div className="space-y-1 pr-1">
                     {filteredPositive.length === 0 ? (
-                      <div className="text-center py-6 text-zinc-655 text-[11px] font-mono">No advancing stocks found</div>
+                      <div className="text-center py-6 text-zinc-655 text-[10px] font-mono">No advancing stocks found</div>
                     ) : (
                       filteredPositive.map((stock, idx) => {
                         const pctWidth = (Math.abs(stock.changePoints) / maxAbsPoints) * 100;
@@ -505,22 +530,22 @@ export default function Nifty50Page() {
                                 style={{ width: `${pctWidth}%` }}
                               ></div>
 
-                              <div className="relative flex items-center justify-between">
-                                <div className="space-y-0.5">
+                              <div className="relative flex items-center justify-between gap-1">
+                                <div className="space-y-0.5 min-w-0">
                                   <div className="flex items-baseline gap-1.5">
-                                    <span className="text-[11px] font-bold font-mono text-zinc-200">{idx + 1}. {stock.icSymbol}</span>
-                                    <span className="text-[9px] text-zinc-500 truncate max-w-[120px] sm:max-w-[180px]">{stock.icSecurity}</span>
+                                    <span className="text-[9px] sm:text-[11px] font-bold font-mono text-zinc-200">{idx + 1}. {stock.icSymbol}</span>
+                                    <span className="hidden sm:inline text-[9px] text-zinc-500 truncate max-w-[80px] md:max-w-[120px]">{stock.icSecurity}</span>
                                   </div>
-                                  <div className="text-[9px] text-zinc-500 font-mono">
-                                    Last: ₹{stock.lastTradedPrice.toLocaleString("en-IN")}
+                                  <div className="text-[8px] sm:text-[9px] text-zinc-500 font-mono">
+                                    ₹{stock.lastTradedPrice.toLocaleString("en-IN")}
                                   </div>
                                 </div>
 
-                                <div className="text-right space-y-0.5 font-mono">
-                                  <div className="text-[11px] font-bold text-emerald-400">
-                                    +{stock.changePoints.toFixed(2)} pts
+                                <div className="text-right space-y-0.5 font-mono flex-shrink-0">
+                                  <div className="text-[9px] sm:text-[11px] font-bold text-emerald-400">
+                                    +{stock.changePoints.toFixed(1)}
                                   </div>
-                                  <div className="text-[9px] text-zinc-555">
+                                  <div className="text-[8px] sm:text-[9px] text-zinc-555">
                                     +{stock.changePer.toFixed(2)}%
                                   </div>
                                 </div>
@@ -540,16 +565,16 @@ export default function Nifty50Page() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                      <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-355 font-mono">
-                        Declining Side ({filteredNegative.length} - {((filteredNegative.length / (data.length || 1)) * 100).toFixed(0)}%) • <span className="text-rose-400">{negativeTotal.toFixed(2)} pts</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
+                      <h2 className="text-[9px] sm:text-[11px] font-bold uppercase tracking-wider text-zinc-355 font-mono">
+                        Declining Side ({filteredNegative.length}) • <span className="text-rose-400">{negativeTotal.toFixed(1)}</span>
                       </h2>
                     </div>
                   </div>
 
                   <div className="space-y-1 pr-1">
                     {filteredNegative.length === 0 ? (
-                      <div className="text-center py-6 text-zinc-655 text-[11px] font-mono">No declining stocks found</div>
+                      <div className="text-center py-6 text-zinc-655 text-[10px] font-mono">No declining stocks found</div>
                     ) : (
                       filteredNegative.map((stock, idx) => {
                         const pctWidth = (Math.abs(stock.changePoints) / maxAbsPoints) * 100;
@@ -563,22 +588,22 @@ export default function Nifty50Page() {
                                 style={{ width: `${pctWidth}%` }}
                               ></div>
 
-                              <div className="relative flex items-center justify-between">
-                                <div className="space-y-0.5">
+                              <div className="relative flex items-center justify-between gap-1">
+                                <div className="space-y-0.5 min-w-0">
                                   <div className="flex items-baseline gap-1.5">
-                                    <span className="text-[11px] font-bold font-mono text-zinc-200">{idx + 1}. {stock.icSymbol}</span>
-                                    <span className="text-[9px] text-zinc-500 truncate max-w-[120px] sm:max-w-[180px]">{stock.icSecurity}</span>
+                                    <span className="text-[9px] sm:text-[11px] font-bold font-mono text-zinc-200">{idx + 1}. {stock.icSymbol}</span>
+                                    <span className="hidden sm:inline text-[9px] text-zinc-555 truncate max-w-[80px] md:max-w-[120px]">{stock.icSecurity}</span>
                                   </div>
-                                  <div className="text-[9px] text-zinc-500 font-mono">
-                                    Last: ₹{stock.lastTradedPrice.toLocaleString("en-IN")}
+                                  <div className="text-[8px] sm:text-[9px] text-zinc-555 font-mono">
+                                    ₹{stock.lastTradedPrice.toLocaleString("en-IN")}
                                   </div>
                                 </div>
 
-                                <div className="text-right space-y-0.5 font-mono">
-                                  <div className="text-[11px] font-bold text-rose-400">
-                                    {stock.changePoints.toFixed(2)} pts
+                                <div className="text-right space-y-0.5 font-mono flex-shrink-0">
+                                  <div className="text-[9px] sm:text-[11px] font-bold text-rose-400">
+                                    {stock.changePoints.toFixed(1)}
                                   </div>
-                                  <div className="text-[9px] text-zinc-555">
+                                  <div className="text-[8px] sm:text-[9px] text-zinc-555">
                                     {stock.changePer.toFixed(2)}%
                                   </div>
                                 </div>
@@ -704,75 +729,6 @@ export default function Nifty50Page() {
               </section>
             )}
 
-            {/* Circle View (Single outer circle container packing all stocks) */}
-            {viewMode === "circle" && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5">
-                  <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 font-mono">Bubble Circle Container Packing</h2>
-                  <span className="text-[10px] font-bold text-zinc-500 font-mono">All stocks packed inside one index circle</span>
-                </div>
-                <div className="flex justify-center items-center py-4">
-                  <div className="w-[500px] h-[500px] rounded-full border border-zinc-800 bg-[#09090b]/40 backdrop-blur-md relative flex flex-wrap items-center justify-center p-12 overflow-hidden shadow-inner shadow-black/80 gap-2">
-                    {[...filteredPositive, ...filteredNegative]
-                      .sort((a, b) => sortBy === "points" ? b.changePoints - a.changePoints : b.changePer - a.changePer)
-                      .map((stock, idx) => {
-                        const isPos = stock.isPositive === "Y";
-                        const absPoints = Math.abs(stock.changePoints);
-                        
-                        // Calculate larger bubble size (diameter in px) based on impact significance to fit symbol, pts, and %
-                        const size = Math.max(56, Math.min(104, 56 + (absPoints / maxAbsPoints) * 48));
-                        
-                        const bgStyle = isPos 
-                          ? { backgroundColor: `rgba(6, 78, 59, ${0.45 + (absPoints / maxAbsPoints) * 0.55})`, borderColor: "rgba(52, 211, 153, 0.8)", width: `${size}px`, height: `${size}px` }
-                          : { backgroundColor: `rgba(127, 29, 29, ${0.45 + (absPoints / maxAbsPoints) * 0.55})`, borderColor: "rgba(248, 113, 113, 0.8)", width: `${size}px`, height: `${size}px` };
-
-                        return (
-                          <div
-                            key={stock.icSymbol}
-                            style={bgStyle}
-                            className="group relative rounded-full border flex flex-col items-center justify-center cursor-pointer transition hover:scale-110 hover:ring-2 hover:ring-white/40 shadow-lg text-center"
-                          >
-                            <span className="text-[8px] font-extrabold font-mono text-white drop-shadow-sm truncate max-w-[90%] select-none leading-none">
-                              {idx + 1}. {stock.icSymbol}
-                            </span>
-                            <div className="flex flex-col items-center select-none font-mono text-[7px] leading-none mt-0.5">
-                              <span className={isPos ? "text-emerald-200 font-bold" : "text-rose-200 font-bold"}>
-                                {isPos ? `+${stock.changePoints.toFixed(1)}` : stock.changePoints.toFixed(1)}
-                              </span>
-                              <span className="text-zinc-200 mt-[1px]">
-                                {isPos ? `+${stock.changePer.toFixed(1)}%` : `${stock.changePer.toFixed(1)}%`}
-                              </span>
-                            </div>
-
-                            {/* Hover Tooltip */}
-                            <div className="absolute z-30 bottom-full mb-1.5 hidden group-hover:block w-48 bg-zinc-950 border border-zinc-800 p-2 rounded-lg text-left shadow-2xl text-[10px] space-y-1 pointer-events-none">
-                              <div className="font-bold text-zinc-100 font-mono">{idx + 1}. {stock.icSymbol}</div>
-                              <div className="text-[8px] text-zinc-400 truncate">{stock.icSecurity}</div>
-                              <div className="h-px bg-zinc-850 my-1"></div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-500">LTP:</span>
-                                <span className="font-mono font-semibold text-zinc-200">₹{stock.lastTradedPrice.toLocaleString("en-IN")}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-500">Change:</span>
-                                <span className={`font-mono font-semibold ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
-                                  {isPos ? `+${stock.changePer.toFixed(2)}` : stock.changePer.toFixed(2)}%
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-zinc-500">Impact:</span>
-                                <span className={`font-mono font-semibold ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
-                                  {isPos ? `+${stock.changePoints.toFixed(2)}` : stock.changePoints.toFixed(2)} pts
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              </section>
-            )}
             {/* Chart View */}
             {viewMode === "chart" && (
               <section className="space-y-4 animate-in fade-in duration-300">
@@ -831,9 +787,30 @@ export default function Nifty50Page() {
 
                 {/* Top 5 Stocks Heavyweight Chart */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-zinc-850 pb-1">
-                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Top 5 Index Heavyweight Stock Contributions</h3>
-                    <span className="text-[9px] text-zinc-500 font-mono">HDFC, ICICI, Reliance, Airtel, L&T</span>
+                  <div className="flex flex-row items-center justify-between border-b border-zinc-850 pb-1.5">
+                    <div className="space-y-0.5">
+                      <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Top 5 Index Heavyweight Stock Contributions</h3>
+                      <p className="text-[8px] text-zinc-500 font-mono">HDFC, ICICI, Reliance, Airtel, L&T</p>
+                    </div>
+                    {/* Metric Select Selector */}
+                    <div className="flex items-center gap-1 bg-zinc-950 p-1 border border-zinc-850 rounded-lg">
+                      <button
+                        onClick={() => setHeavyweightMetric("points")}
+                        className={`px-2.5 py-0.5 rounded text-[9px] font-semibold font-mono transition ${
+                          heavyweightMetric === "points" ? "bg-zinc-805 text-white" : "text-zinc-555 hover:text-zinc-300"
+                        }`}
+                      >
+                        Points
+                      </button>
+                      <button
+                        onClick={() => setHeavyweightMetric("percent")}
+                        className={`px-2.5 py-0.5 rounded text-[9px] font-semibold font-mono transition ${
+                          heavyweightMetric === "percent" ? "bg-zinc-805 text-white" : "text-zinc-555 hover:text-zinc-300"
+                        }`}
+                      >
+                        Percent %
+                      </button>
+                    </div>
                   </div>
                   <div className="bg-zinc-900/10 border border-zinc-850 rounded-xl p-4 h-[280px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -846,11 +823,11 @@ export default function Nifty50Page() {
                           labelStyle={{ fontWeight: "bold", color: "#f4f4f5" }}
                         />
                         <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: "10px" }} />
-                        <Line type="monotone" name="HDFC Bank" dataKey="hdfc" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        <Line type="monotone" name="ICICI Bank" dataKey="icici" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        <Line type="monotone" name="Reliance" dataKey="reliance" stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        <Line type="monotone" name="Bharti Airtel" dataKey="airtel" stroke="#ec4899" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        <Line type="monotone" name="L&T" dataKey="lt" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="HDFC Bank" dataKey={heavyweightMetric === "points" ? "hdfc" : "hdfcPct"} stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="ICICI Bank" dataKey={heavyweightMetric === "points" ? "icici" : "iciciPct"} stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="Reliance" dataKey={heavyweightMetric === "points" ? "reliance" : "reliancePct"} stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="Bharti Airtel" dataKey={heavyweightMetric === "points" ? "airtel" : "airtelPct"} stroke="#ec4899" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="L&T" dataKey={heavyweightMetric === "points" ? "lt" : "ltPct"} stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
