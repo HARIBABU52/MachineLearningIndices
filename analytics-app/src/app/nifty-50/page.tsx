@@ -539,19 +539,19 @@ export default function Nifty50Page() {
                   <span className="text-[10px] font-bold text-zinc-500 font-mono">All stocks packed inside one index circle</span>
                 </div>
                 <div className="flex justify-center items-center py-4">
-                  <div className="w-[450px] h-[450px] rounded-full border border-zinc-800 bg-[#09090b]/40 backdrop-blur-md relative flex flex-wrap items-center justify-center p-12 overflow-hidden shadow-inner shadow-black/80 gap-1.5">
+                  <div className="w-[500px] h-[500px] rounded-full border border-zinc-800 bg-[#09090b]/40 backdrop-blur-md relative flex flex-wrap items-center justify-center p-12 overflow-hidden shadow-inner shadow-black/80 gap-2">
                     {[...filteredPositive, ...filteredNegative]
                       .sort((a, b) => sortBy === "points" ? b.changePoints - a.changePoints : b.changePer - a.changePer)
                       .map((stock, idx) => {
                         const isPos = stock.isPositive === "Y";
                         const absPoints = Math.abs(stock.changePoints);
                         
-                        // Calculate bubble size (diameter in px) based on impact significance
-                        const size = Math.max(34, Math.min(74, 34 + (absPoints / maxAbsPoints) * 40));
+                        // Calculate larger bubble size (diameter in px) based on impact significance to fit symbol, pts, and %
+                        const size = Math.max(56, Math.min(104, 56 + (absPoints / maxAbsPoints) * 48));
                         
                         const bgStyle = isPos 
-                          ? { backgroundColor: `rgba(6, 78, 59, ${0.35 + (absPoints / maxAbsPoints) * 0.65})`, borderColor: `rgba(52, 211, 153, ${0.25 + (absPoints / maxAbsPoints) * 0.7})`, width: `${size}px`, height: `${size}px` }
-                          : { backgroundColor: `rgba(127, 29, 29, ${0.35 + (absPoints / maxAbsPoints) * 0.65})`, borderColor: `rgba(248, 113, 113, ${0.25 + (absPoints / maxAbsPoints) * 0.7})`, width: `${size}px`, height: `${size}px` };
+                          ? { backgroundColor: `rgba(6, 78, 59, ${0.45 + (absPoints / maxAbsPoints) * 0.55})`, borderColor: "rgba(52, 211, 153, 0.8)", width: `${size}px`, height: `${size}px` }
+                          : { backgroundColor: `rgba(127, 29, 29, ${0.45 + (absPoints / maxAbsPoints) * 0.55})`, borderColor: "rgba(248, 113, 113, 0.8)", width: `${size}px`, height: `${size}px` };
 
                         return (
                           <div
@@ -559,12 +559,17 @@ export default function Nifty50Page() {
                             style={bgStyle}
                             className="group relative rounded-full border flex flex-col items-center justify-center cursor-pointer transition hover:scale-110 hover:ring-2 hover:ring-white/40 shadow-lg text-center"
                           >
-                            <span className="text-[8px] font-extrabold font-mono text-white drop-shadow-sm truncate max-w-[90%] select-none">
-                              {idx + 1}
+                            <span className="text-[8px] font-extrabold font-mono text-white drop-shadow-sm truncate max-w-[90%] select-none leading-none">
+                              {idx + 1}. {stock.icSymbol}
                             </span>
-                            <span className={`text-[7px] font-bold font-mono select-none ${isPos ? "text-emerald-300" : "text-rose-300"}`}>
-                              {isPos ? `+${stock.changePoints.toFixed(0)}` : stock.changePoints.toFixed(0)}
-                            </span>
+                            <div className="flex flex-col items-center select-none font-mono text-[7px] leading-none mt-0.5">
+                              <span className={isPos ? "text-emerald-200 font-bold" : "text-rose-200 font-bold"}>
+                                {isPos ? `+${stock.changePoints.toFixed(1)}` : stock.changePoints.toFixed(1)}
+                              </span>
+                              <span className="text-zinc-200 mt-[1px]">
+                                {isPos ? `+${stock.changePer.toFixed(1)}%` : `${stock.changePer.toFixed(1)}%`}
+                              </span>
+                            </div>
 
                             {/* Hover Tooltip */}
                             <div className="absolute z-30 bottom-full mb-1.5 hidden group-hover:block w-48 bg-zinc-950 border border-zinc-800 p-2 rounded-lg text-left shadow-2xl text-[10px] space-y-1 pointer-events-none">
