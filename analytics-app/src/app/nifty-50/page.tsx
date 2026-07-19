@@ -432,7 +432,7 @@ export default function Nifty50Page() {
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2 pr-1">
                   {[...filteredPositive, ...filteredNegative]
-                    .sort((a, b) => b.changePoints - a.changePoints)
+                    .sort((a, b) => sortBy === "points" ? b.changePoints - a.changePoints : b.changePer - a.changePer)
                     .map((stock, idx) => {
                       const isPos = stock.isPositive === "Y";
                       const pct = Math.min(Math.abs(stock.changePoints) / maxAbsPoints, 1);
@@ -508,7 +508,7 @@ export default function Nifty50Page() {
                     </thead>
                     <tbody className="divide-y divide-zinc-850/60">
                       {[...filteredPositive, ...filteredNegative]
-                        .sort((a, b) => b.changePoints - a.changePoints)
+                        .sort((a, b) => sortBy === "points" ? b.changePoints - a.changePoints : b.changePer - a.changePer)
                         .map((stock, idx) => {
                           const isPos = stock.isPositive === "Y";
                           return (
@@ -531,70 +531,67 @@ export default function Nifty50Page() {
               </section>
             )}
 
-            {/* Circle View */}
+            {/* Circle View (Single outer circle container packing all stocks) */}
             {viewMode === "circle" && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5">
-                  <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 font-mono">Bubble Circle Overview</h2>
-                  <span className="text-[10px] font-bold text-zinc-500 font-mono">Circle size represents points impact</span>
+                  <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 font-mono">Bubble Circle Container Packing</h2>
+                  <span className="text-[10px] font-bold text-zinc-500 font-mono">All stocks packed inside one index circle</span>
                 </div>
-                <div className="flex flex-wrap items-center justify-center gap-3 p-4 bg-zinc-950/20 border border-zinc-850 rounded-xl pr-1">
-                  {[...filteredPositive, ...filteredNegative]
-                    .sort((a, b) => b.changePoints - a.changePoints)
-                    .map((stock, idx) => {
-                      const isPos = stock.isPositive === "Y";
-                      const absPoints = Math.abs(stock.changePoints);
-                      
-                      // Calculate bubble size (diameter in px) based on impact significance
-                      const size = Math.max(54, Math.min(100, 54 + (absPoints / maxAbsPoints) * 46));
-                      
-                      const bgStyle = isPos 
-                        ? { backgroundColor: `rgba(6, 78, 59, ${0.35 + (absPoints / maxAbsPoints) * 0.65})`, borderColor: `rgba(52, 211, 153, ${0.25 + (absPoints / maxAbsPoints) * 0.7})`, width: `${size}px`, height: `${size}px` }
-                        : { backgroundColor: `rgba(127, 29, 29, ${0.35 + (absPoints / maxAbsPoints) * 0.65})`, borderColor: `rgba(248, 113, 113, ${0.25 + (absPoints / maxAbsPoints) * 0.7})`, width: `${size}px`, height: `${size}px` };
+                <div className="flex justify-center items-center py-4">
+                  <div className="w-[450px] h-[450px] rounded-full border border-zinc-800 bg-[#09090b]/40 backdrop-blur-md relative flex flex-wrap items-center justify-center p-12 overflow-hidden shadow-inner shadow-black/80 gap-1.5">
+                    {[...filteredPositive, ...filteredNegative]
+                      .sort((a, b) => sortBy === "points" ? b.changePoints - a.changePoints : b.changePer - a.changePer)
+                      .map((stock, idx) => {
+                        const isPos = stock.isPositive === "Y";
+                        const absPoints = Math.abs(stock.changePoints);
+                        
+                        // Calculate bubble size (diameter in px) based on impact significance
+                        const size = Math.max(34, Math.min(74, 34 + (absPoints / maxAbsPoints) * 40));
+                        
+                        const bgStyle = isPos 
+                          ? { backgroundColor: `rgba(6, 78, 59, ${0.35 + (absPoints / maxAbsPoints) * 0.65})`, borderColor: `rgba(52, 211, 153, ${0.25 + (absPoints / maxAbsPoints) * 0.7})`, width: `${size}px`, height: `${size}px` }
+                          : { backgroundColor: `rgba(127, 29, 29, ${0.35 + (absPoints / maxAbsPoints) * 0.65})`, borderColor: `rgba(248, 113, 113, ${0.25 + (absPoints / maxAbsPoints) * 0.7})`, width: `${size}px`, height: `${size}px` };
 
-                      return (
-                        <div
-                          key={stock.icSymbol}
-                          style={bgStyle}
-                          className="group relative rounded-full border flex flex-col items-center justify-center cursor-pointer transition hover:scale-110 hover:ring-2 hover:ring-white/40 shadow-lg text-center"
-                        >
-                          <span className="text-[9px] font-extrabold font-mono text-white drop-shadow-sm truncate max-w-[90%] select-none">
-                            {idx + 1}. {stock.icSymbol}
-                          </span>
-                          <div className="flex flex-col items-center select-none font-mono text-[8px] leading-none mt-0.5">
-                            <span className={isPos ? "text-emerald-300 font-bold" : "text-rose-300 font-bold"}>
-                              {isPos ? `+${stock.changePoints.toFixed(1)}` : stock.changePoints.toFixed(1)}
+                        return (
+                          <div
+                            key={stock.icSymbol}
+                            style={bgStyle}
+                            className="group relative rounded-full border flex flex-col items-center justify-center cursor-pointer transition hover:scale-110 hover:ring-2 hover:ring-white/40 shadow-lg text-center"
+                          >
+                            <span className="text-[8px] font-extrabold font-mono text-white drop-shadow-sm truncate max-w-[90%] select-none">
+                              {idx + 1}
                             </span>
-                            <span className="text-zinc-300 scale-90">
-                              {isPos ? `+${stock.changePer.toFixed(1)}%` : `${stock.changePer.toFixed(1)}%`}
+                            <span className={`text-[7px] font-bold font-mono select-none ${isPos ? "text-emerald-300" : "text-rose-300"}`}>
+                              {isPos ? `+${stock.changePoints.toFixed(0)}` : stock.changePoints.toFixed(0)}
                             </span>
-                          </div>
 
-                          {/* Hover Tooltip */}
-                          <div className="absolute z-30 bottom-full mb-1.5 hidden group-hover:block w-48 bg-zinc-950 border border-zinc-800 p-2 rounded-lg text-left shadow-2xl text-[10px] space-y-1 pointer-events-none">
-                            <div className="font-bold text-zinc-100 font-mono">{idx + 1}. {stock.icSymbol}</div>
-                            <div className="text-[8px] text-zinc-400 truncate">{stock.icSecurity}</div>
-                            <div className="h-px bg-zinc-850 my-1"></div>
-                            <div className="flex justify-between">
-                              <span className="text-zinc-500">LTP:</span>
-                              <span className="font-mono font-semibold text-zinc-200">₹{stock.lastTradedPrice.toLocaleString("en-IN")}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-zinc-500">Change:</span>
-                              <span className={`font-mono font-semibold ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
-                                {isPos ? `+${stock.changePer.toFixed(2)}` : stock.changePer.toFixed(2)}%
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-zinc-500">Impact:</span>
-                              <span className={`font-mono font-semibold ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
-                                {isPos ? `+${stock.changePoints.toFixed(2)}` : stock.changePoints.toFixed(2)} pts
-                              </span>
+                            {/* Hover Tooltip */}
+                            <div className="absolute z-30 bottom-full mb-1.5 hidden group-hover:block w-48 bg-zinc-950 border border-zinc-800 p-2 rounded-lg text-left shadow-2xl text-[10px] space-y-1 pointer-events-none">
+                              <div className="font-bold text-zinc-100 font-mono">{idx + 1}. {stock.icSymbol}</div>
+                              <div className="text-[8px] text-zinc-400 truncate">{stock.icSecurity}</div>
+                              <div className="h-px bg-zinc-850 my-1"></div>
+                              <div className="flex justify-between">
+                                <span className="text-zinc-500">LTP:</span>
+                                <span className="font-mono font-semibold text-zinc-200">₹{stock.lastTradedPrice.toLocaleString("en-IN")}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-zinc-500">Change:</span>
+                                <span className={`font-mono font-semibold ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {isPos ? `+${stock.changePer.toFixed(2)}` : stock.changePer.toFixed(2)}%
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-zinc-500">Impact:</span>
+                                <span className={`font-mono font-semibold ${isPos ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {isPos ? `+${stock.changePoints.toFixed(2)}` : stock.changePoints.toFixed(2)} pts
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                  </div>
                 </div>
               </section>
             )}
