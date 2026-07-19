@@ -23,7 +23,36 @@ interface HistoryItem {
   positivePoints: number;
   negativePoints: number;
   netPoints: number;
+  hdfc: number;
+  icici: number;
+  reliance: number;
+  airtel: number;
+  lt: number;
 }
+
+const getISTDateTime = () => {
+  const date = new Date();
+  const istString = date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+  const istDate = new Date(istString);
+  const day = istDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const hours = istDate.getHours();
+  const minutes = istDate.getMinutes();
+  
+  const year = istDate.getFullYear();
+  const month = String(istDate.getMonth() + 1).padStart(2, "0");
+  const dayOfMonth = String(istDate.getDate()).padStart(2, "0");
+  const dateStr = `${year}-${month}-${dayOfMonth}`;
+  
+  const timeStr = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  
+  const totalMinutes = hours * 60 + minutes;
+  const startMarketMinutes = 9 * 60 + 15;
+  const endMarketMinutes = 15 * 60 + 30;
+  
+  const isMarketHours = day >= 1 && day <= 5 && totalMinutes >= startMarketMinutes && totalMinutes <= endMarketMinutes;
+  
+  return { dateStr, timeStr, isMarketHours };
+};
 
 export default function Nifty50Page() {
   const [data, setData] = useState<StockContribution[]>([]);
@@ -35,6 +64,8 @@ export default function Nifty50Page() {
   const [viewMode, setViewMode] = useState<"list" | "grid" | "table" | "circle" | "chart">("list");
   const [sortBy, setSortBy] = useState<"points" | "percent">("points");
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [historyDates, setHistoryDates] = useState<string[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -123,52 +154,111 @@ export default function Nifty50Page() {
     }, 60000);
     return () => clearInterval(interval);
   }, [autoRefresh]);
+  // Load and manage daily history
   useEffect(() => {
     if (data.length === 0) return;
+
+    // Get current IST date and time info
+    const { dateStr, timeStr, isMarketHours } = getISTDateTime();
+
+    // Helper to find stock contribution points
+    const getPoints = (symbol: string) => {
+      const stock = data.find((s) => s.icSymbol === symbol);
+      return stock ? Number(stock.changePoints.toFixed(2)) : 0;
+    };
 
     const positiveTotal = data.filter((item) => item.isPositive === "Y").reduce((sum, item) => sum + item.changePoints, 0);
     const negativeTotal = data.filter((item) => item.isPositive === "N").reduce((sum, item) => sum + item.changePoints, 0);
 
-    const now = new Date();
-    const formattedNow = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const hdfcVal = getPoints("HDFCBANK");
+    const iciciVal = getPoints("ICICIBANK");
+    const relianceVal = getPoints("RELIANCE");
+    const airtelVal = getPoints("BHARTIAIRTEL");
+    const ltVal = getPoints("LT");
 
-    setHistory((prev) => {
-      if (prev.length > 0) {
-        // Just append the current live point if not a duplicate
-        const last = prev[prev.length - 1];
-        if (last.timestamp === formattedNow) return prev;
-        return [...prev, {
-          timestamp: formattedNow,
-          positivePoints: Number(positiveTotal.toFixed(2)),
-          negativePoints: Number(Math.abs(negativeTotal).toFixed(2)),
-          netPoints: Number((positiveTotal + negativeTotal).toFixed(2))
-        }].slice(-30);
+    // Load existing history map from localStorage
+    let storedHistory: { [key: string]: HistoryItem[] } = {};
+    try {
+      const raw = localStorage.getItem("nifty_daily_history");
+      if (raw) {
+        storedHistory = JSON.parse(raw);
       }
+    } catch (e) {
+      console.error("Failed to parse stored daily history", e);
+    }
 
-      // Seed history with 10 past minutes of slightly varied points
+    // Set initial selected date if empty
+    if (!selectedDate) {
+      setSelectedDate(dateStr);
+    }
+
+    // Seed the current date history if empty
+    if (!storedHistory[dateStr]) {
       const seed: HistoryItem[] = [];
+      const baseTime = new Date();
+      // Generate 10 seed ticks going back 10 minutes (simulating market hours)
       for (let i = 10; i >= 1; i--) {
-        const time = new Date(now.getTime() - i * 60000);
-        const seedTime = time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const time = new Date(baseTime.getTime() - i * 60000);
+        const timeString = time.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
         const noise = (Math.random() - 0.5) * 4;
         const noiseNeg = (Math.random() - 0.5) * 4;
         seed.push({
-          timestamp: seedTime,
+          timestamp: timeString,
           positivePoints: Number((positiveTotal + noise).toFixed(2)),
           negativePoints: Number((Math.abs(negativeTotal) + noiseNeg).toFixed(2)),
-          netPoints: Number((positiveTotal + noise + negativeTotal + noiseNeg).toFixed(2))
+          netPoints: Number((positiveTotal + noise + negativeTotal + noiseNeg).toFixed(2)),
+          hdfc: Number((hdfcVal + (Math.random() - 0.5) * 1).toFixed(2)),
+          icici: Number((iciciVal + (Math.random() - 0.5) * 1).toFixed(2)),
+          reliance: Number((relianceVal + (Math.random() - 0.5) * 1.5).toFixed(2)),
+          airtel: Number((airtelVal + (Math.random() - 0.5) * 0.8).toFixed(2)),
+          lt: Number((ltVal + (Math.random() - 0.5) * 0.8).toFixed(2))
         });
       }
-      // Add current live point
+      // Add current live tick
       seed.push({
-        timestamp: formattedNow,
+        timestamp: timeStr,
         positivePoints: Number(positiveTotal.toFixed(2)),
         negativePoints: Number(Math.abs(negativeTotal).toFixed(2)),
-        netPoints: Number((positiveTotal + negativeTotal).toFixed(2))
+        netPoints: Number((positiveTotal + negativeTotal).toFixed(2)),
+        hdfc: hdfcVal,
+        icici: iciciVal,
+        reliance: relianceVal,
+        airtel: airtelVal,
+        lt: ltVal
       });
-      return seed;
-    });
-  }, [data]);
+      storedHistory[dateStr] = seed;
+    } else if (isMarketHours) {
+      // ONLY append to the current day if it's within market hours
+      const dayHistory = storedHistory[dateStr];
+      const last = dayHistory[dayHistory.length - 1];
+      if (last.timestamp !== timeStr) {
+        dayHistory.push({
+          timestamp: timeStr,
+          positivePoints: Number(positiveTotal.toFixed(2)),
+          negativePoints: Number(Math.abs(negativeTotal).toFixed(2)),
+          netPoints: Number((positiveTotal + negativeTotal).toFixed(2)),
+          hdfc: hdfcVal,
+          icici: iciciVal,
+          reliance: relianceVal,
+          airtel: airtelVal,
+          lt: ltVal
+        });
+        // Keep last 60 ticks per day
+        storedHistory[dateStr] = dayHistory.slice(-60);
+      }
+    }
+
+    // Persist and update states
+    localStorage.setItem("nifty_daily_history", JSON.stringify(storedHistory));
+    const dates = Object.keys(storedHistory).sort((a, b) => b.localeCompare(a));
+    setHistoryDates(dates);
+    
+    // Set the currently active history based on user selected dropdown date
+    const activeDate = selectedDate || dateStr;
+    if (storedHistory[activeDate]) {
+      setHistory(storedHistory[activeDate]);
+    }
+  }, [data, selectedDate]);
 
   // Calculations
   const positiveStocks = data.filter((item) => item.isPositive === "Y");
@@ -685,12 +775,33 @@ export default function Nifty50Page() {
             )}
             {/* Chart View */}
             {viewMode === "chart" && (
-              <section className="space-y-3 animate-in fade-in duration-300">
-                <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5">
-                  <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 font-mono">Index Points Trend (Advancing vs Declining)</h2>
-                  <span className="text-[10px] font-bold text-zinc-500 font-mono">Updates live with auto-refresh (1min)</span>
+              <section className="space-y-4 animate-in fade-in duration-300">
+                {/* Date Dropdown Selection & Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-850 pb-2">
+                  <div className="space-y-0.5">
+                    <h2 className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 font-mono">Index Points Trend (Advancing vs Declining)</h2>
+                    <p className="text-[9px] text-zinc-500 font-mono">Indian market hours (9:15 AM - 3:30 PM IST) only</p>
+                  </div>
+                  {historyDates.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-zinc-400 font-mono">Select Date:</span>
+                      <select
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-semibold px-2 py-1 text-zinc-300 focus:outline-none focus:border-indigo-500 transition font-mono"
+                      >
+                        {historyDates.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
-                <div className="bg-zinc-900/10 border border-zinc-850 rounded-xl p-4 h-[320px]">
+
+                {/* Main Index Points ComposedChart */}
+                <div className="bg-zinc-900/10 border border-zinc-850 rounded-xl p-4 h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
@@ -710,12 +821,39 @@ export default function Nifty50Page() {
                         contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: "10px", borderRadius: "8px" }}
                         labelStyle={{ fontWeight: "bold", color: "#f4f4f5" }}
                       />
-                      <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "10px" }} />
+                      <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: "10px" }} />
                       <Area type="monotone" name="Positive Points" dataKey="positivePoints" stroke="#10b981" fillOpacity={1} fill="url(#colorPos)" strokeWidth={2.5} activeDot={{ r: 4 }} />
                       <Area type="monotone" name="Negative Points" dataKey="negativePoints" stroke="#ef4444" fillOpacity={1} fill="url(#colorNeg)" strokeWidth={2.5} activeDot={{ r: 4 }} />
                       <Line type="monotone" name="Net Points" dataKey="netPoints" stroke="#fbbf24" strokeWidth={3} dot={{ r: 2.5 }} activeDot={{ r: 4.5 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
+                </div>
+
+                {/* Top 5 Stocks Heavyweight Chart */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between border-b border-zinc-850 pb-1">
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Top 5 Index Heavyweight Stock Contributions</h3>
+                    <span className="text-[9px] text-zinc-500 font-mono">HDFC, ICICI, Reliance, Airtel, L&T</span>
+                  </div>
+                  <div className="bg-zinc-900/10 border border-zinc-850 rounded-xl p-4 h-[280px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a/40" vertical={false} />
+                        <XAxis dataKey="timestamp" stroke="#71717a" fontSize={9} tickLine={false} />
+                        <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: "10px", borderRadius: "8px" }}
+                          labelStyle={{ fontWeight: "bold", color: "#f4f4f5" }}
+                        />
+                        <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: "10px" }} />
+                        <Line type="monotone" name="HDFC Bank" dataKey="hdfc" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="ICICI Bank" dataKey="icici" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="Reliance" dataKey="reliance" stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="Bharti Airtel" dataKey="airtel" stroke="#ec4899" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" name="L&T" dataKey="lt" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </section>
             )}
