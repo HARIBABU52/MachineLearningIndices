@@ -79,7 +79,7 @@ export default function Nifty50Page() {
 
     const targetUrl = "https://www.nseindia.com/api/NextApi/apiClient/indexTrackerApi?functionName=getContributionData&index=NIFTY%2050&noofrecords=0&flag=1";
 
-    // Define a list of alternative public CORS proxies to try sequentially
+    // Define a list of alternative public CORS proxies to try
     const proxies = [
       {
         name: "CORSProxy.io",
@@ -98,52 +98,98 @@ export default function Nifty50Page() {
       }
     ];
 
-    let lastError = "";
+    // Helper to fetch with a timeout
+    const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 3000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+      } catch (error) {
+        clearTimeout(id);
+        throw error;
+      }
+    };
 
     try {
-      // First attempt: try direct Netlify proxy route
-      try {
-        console.log("Attempting direct Netlify CDN rewrite fetch via /api/nifty-contribution...");
-        const directRes = await fetch("/api/nifty-contribution");
-        if (directRes.ok) {
-          const json = await directRes.json();
-          if (json && json.data) {
-            setData(json.data);
-            console.log("Successfully loaded Nifty 50 data directly via Netlify CDN rewrite");
-            return; // Success! Exit the function.
+      // First attempt: try direct Netlify proxy route (skip if on standard Next.js dev ports)
+      const isNextDev = typeof window !== "undefined" && 
+        window.location.hostname === "localhost" && 
+        (window.location.port === "3000" || window.location.port === "3001");
+
+      if (!isNextDev) {
+        try {
+          console.log("Attempting direct Netlify CDN rewrite fetch via /api/nifty-contribution...");
+          // Use a fast timeout (2.5s) so we don't hang if the redirect isn't working/responding
+          const directRes = await fetchWithTimeout("/api/nifty-contribution", {}, 2500);
+          
+          // Verify that it returned JSON and not a fallback HTML page
+          const contentType = directRes.headers.get("content-type");
+          if (directRes.ok && contentType && contentType.includes("application/json")) {
+            const json = await directRes.json();
+            if (json && json.data) {
+              setData(json.data);
+              console.log("Successfully loaded Nifty 50 data directly via Netlify CDN rewrite");
+              return; // Success! Exit the function.
+            }
           }
+          console.log("Direct Netlify CDN rewrite response invalid or not JSON. Trying public CORS proxies...");
+        } catch (err: any) {
+          console.log("Direct Netlify CDN rewrite fetch failed or timed out. Trying public CORS proxies...", err.message || err);
         }
-        console.log("Direct Netlify CDN rewrite returned non-OK status. Falling back to public CORS proxies...");
-      } catch (err: any) {
-        console.log("Direct Netlify CDN rewrite fetch failed. Falling back to public CORS proxies...", err.message || err);
+      } else {
+        console.log("Skipping direct Netlify rewrite (Next.js local dev detected). Querying public CORS proxies...");
       }
 
-      for (const proxy of proxies) {
+      // Race all proxies in parallel to get the fastest successful response
+      console.log("Querying public CORS proxies in parallel...");
+      const abortController = new AbortController();
+      
+      const proxyPromises = proxies.map(async (proxy) => {
         try {
-          console.log(`Attempting to fetch Nifty 50 data via ${proxy.name}...`);
           const proxyUrl = proxy.getUrl(targetUrl);
-          const res = await fetch(proxyUrl);
-
+          // Set a 6-second timeout per proxy request
+          const res = await fetchWithTimeout(proxyUrl, { signal: abortController.signal }, 6000);
+          
           if (!res.ok) {
-            throw new Error(`${proxy.name} returned status: ${res.status} ${res.statusText}`);
+            throw new Error(`Status ${res.status}`);
           }
-
+          
           const json = await proxy.parse(res);
           if (json && json.data) {
-            setData(json.data);
-            console.log(`Successfully loaded Nifty 50 data via ${proxy.name}`);
-            return; // Success! Exit the function.
-          } else {
-            throw new Error(`${proxy.name} parsed data successfully, but 'data' field is missing.`);
+            return json.data;
           }
+          throw new Error("Missing 'data' field");
         } catch (err: any) {
-          console.warn(`${proxy.name} failed:`, err.message || err);
-          lastError += `${proxy.name}: ${err.message || err}\n`;
+          throw new Error(`${proxy.name}: ${err.message || err}`);
         }
-      }
+      });
 
-      // If we reach here, all proxies failed
-      setError(`All live connection attempts failed:\n\n${lastError}`);
+      try {
+        const fastestData = await new Promise<any>((resolve, reject) => {
+          let failures = 0;
+          const errors: string[] = [];
+          
+          proxyPromises.forEach((promise) => {
+            promise.then((resolvedData) => {
+              abortController.abort(); // Cancel other ongoing fetches
+              resolve(resolvedData);
+            }).catch((err) => {
+              errors.push(err.message);
+              failures++;
+              if (failures === proxyPromises.length) {
+                reject(new Error(errors.join("\n")));
+              }
+            });
+          });
+        });
+
+        setData(fastestData);
+        console.log("Successfully loaded Nifty 50 data via the fastest proxy");
+      } catch (err: any) {
+        setError(`All live connection attempts failed:\n\n${err.message}`);
+      }
     } finally {
       setLoading(false);
     }

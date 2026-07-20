@@ -11,10 +11,7 @@
   to = "https://www.nseindia.com/api/NextApi/apiClient/indexTrackerApi?functionName=getContributionData&index=NIFTY%2050&noofrecords=0&flag=1"
   status = 200
   force = true
-  [redirects.headers]
-    User-Agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    Referer = "https://www.nseindia.com/"
-    Accept = "*/*"
+  headers = { User-Agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", Referer = "https://www.nseindia.com/", Accept = "*/*" }
 
 [[redirects]]
   from = "/*"
